@@ -87,6 +87,8 @@ function rowToRunLog(row: Record<string, unknown>): RunLog {
     errorMessage: row.error_message as string | null,
     firedAt: row.fired_at as string,
     completedAt: row.completed_at as string | null,
+    executionDuration: row.execution_duration as number | undefined,
+    scheduledTime: row.scheduled_time as string | undefined,
     phoneNumber: row.phone_number as string | undefined,
     contactName: row.contact_name as string | undefined,
     messagePreview: row.message_preview as string | undefined
@@ -104,6 +106,20 @@ export function initDb(): void {
   // Add new columns to existing DBs (fails silently if column already exists)
   try { db.exec('ALTER TABLE schedules ADD COLUMN day_of_month INTEGER') } catch {}
   try { db.exec('ALTER TABLE schedules ADD COLUMN month_of_year INTEGER') } catch {}
+  try { db.exec('ALTER TABLE run_logs ADD COLUMN execution_duration INTEGER') } catch {}
+  try { db.exec('ALTER TABLE run_logs ADD COLUMN scheduled_time TEXT') } catch {}
+
+  // Auto-prune logs older than 90 days on startup
+  pruneOldLogs(90)
+}
+
+export function pruneOldLogs(olderThanDays: number): void {
+  const result = db.prepare(
+    `DELETE FROM run_logs WHERE fired_at < datetime('now', '-' || ? || ' days')`
+  ).run(olderThanDays)
+  if (result.changes > 0) {
+    console.log(`Pruned ${result.changes} log entries older than ${olderThanDays} days`)
+  }
 }
 
 // --- Schedules ---
@@ -193,15 +209,17 @@ export function toggleSchedule(id: string, enabled: boolean): Schedule {
 export function insertRunLog(
   scheduleId: string,
   status: RunStatus,
-  errorMessage?: string
+  errorMessage?: string,
+  executionDurationMs?: number,
+  scheduledTime?: string
 ): RunLog {
   const id = nanoid()
   const firedAt = new Date().toISOString()
   const completedAt = new Date().toISOString()
   db.prepare(`
-    INSERT INTO run_logs (id, schedule_id, status, error_message, fired_at, completed_at)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(id, scheduleId, status, errorMessage || null, firedAt, completedAt)
+    INSERT INTO run_logs (id, schedule_id, status, error_message, fired_at, completed_at, execution_duration, scheduled_time)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, scheduleId, status, errorMessage || null, firedAt, completedAt, executionDurationMs ?? null, scheduledTime || null)
 
   return {
     id,
@@ -209,7 +227,9 @@ export function insertRunLog(
     status,
     errorMessage: errorMessage || null,
     firedAt,
-    completedAt
+    completedAt,
+    executionDuration: executionDurationMs,
+    scheduledTime: scheduledTime || undefined
   }
 }
 

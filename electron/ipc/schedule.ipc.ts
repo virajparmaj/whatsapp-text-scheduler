@@ -1,43 +1,87 @@
 import { ipcMain } from 'electron'
 import * as db from '../services/db.service'
-import { registerJob, cancelJob, rescheduleJob, testSendSchedule } from '../services/scheduler.service'
+import { registerJob, cancelJob, rescheduleJob, testSendSchedule, getAllNextFireTimes } from '../services/scheduler.service'
 import type { CreateScheduleInput, UpdateScheduleInput } from '../../shared/types'
 
 export function registerScheduleHandlers(): void {
   ipcMain.handle('schedule:getAll', () => {
-    return db.getAllSchedules()
+    try {
+      return db.getAllSchedules()
+    } catch (err) {
+      console.error('[schedule:getAll]', err)
+      throw err
+    }
   })
 
   ipcMain.handle('schedule:get', (_, id: string) => {
-    return db.getScheduleById(id)
+    try {
+      return db.getScheduleById(id)
+    } catch (err) {
+      console.error('[schedule:get]', err)
+      throw err
+    }
   })
 
   ipcMain.handle('schedule:create', (_, data: CreateScheduleInput) => {
-    const schedule = db.createSchedule(data)
-    if (schedule.enabled) {
-      registerJob(schedule)
+    try {
+      const schedule = db.createSchedule(data)
+      if (schedule.enabled) {
+        registerJob(schedule)
+      }
+      return schedule
+    } catch (err) {
+      console.error('[schedule:create]', err)
+      throw err
     }
-    return schedule
   })
 
   ipcMain.handle('schedule:update', (_, id: string, data: UpdateScheduleInput) => {
-    const schedule = db.updateSchedule(id, data)
-    rescheduleJob(id)
-    return schedule
+    try {
+      const schedule = db.updateSchedule(id, data)
+      rescheduleJob(id)
+      return schedule
+    } catch (err) {
+      console.error('[schedule:update]', err)
+      throw err
+    }
   })
 
   ipcMain.handle('schedule:delete', (_, id: string) => {
-    cancelJob(id)
-    db.deleteSchedule(id)
+    try {
+      cancelJob(id)
+      db.deleteSchedule(id)
+    } catch (err) {
+      console.error('[schedule:delete]', err)
+      throw err
+    }
   })
 
   ipcMain.handle('schedule:toggle', (_, id: string, enabled: boolean) => {
-    const schedule = db.toggleSchedule(id, enabled)
-    rescheduleJob(id)
-    return schedule
+    try {
+      const schedule = db.toggleSchedule(id, enabled)
+      rescheduleJob(id)
+      return schedule
+    } catch (err) {
+      console.error('[schedule:toggle]', err)
+      throw err
+    }
   })
 
   ipcMain.handle('schedule:testSend', async (_, id: string) => {
-    return testSendSchedule(id)
+    try {
+      return await testSendSchedule(id)
+    } catch (err) {
+      console.error('[schedule:testSend]', err)
+      throw err
+    }
+  })
+
+  ipcMain.handle('schedule:getNextFireTimes', () => {
+    try {
+      return getAllNextFireTimes()
+    } catch (err) {
+      console.error('[schedule:getNextFireTimes]', err)
+      throw err
+    }
   })
 }

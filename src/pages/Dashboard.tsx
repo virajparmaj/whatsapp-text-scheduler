@@ -1,11 +1,12 @@
-import { useState } from 'react'
-import { useSchedules } from '@/hooks/useSchedules'
+import { useState, useMemo } from 'react'
+import { useScheduleContext } from '@/contexts/ScheduleContext'
+import { useToast } from '@/components/ui/toast'
 import { ScheduleModal } from '@/components/ScheduleModal'
 import { StatusBadge } from '@/components/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
-import { Plus, Pencil, Trash2, Play, Copy, CalendarClock } from 'lucide-react'
-import { truncate, formatDateTime } from '@/lib/utils'
+import { Plus, Pencil, Trash2, Play, Copy, CalendarClock, Clock } from 'lucide-react'
+import { truncate, formatDateTime, formatRelativeTime, getTimelineBucket, BUCKET_LABELS, type TimelineBucket } from '@/lib/utils'
 import type { Schedule, CreateScheduleInput } from '../../shared/types'
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -30,12 +31,61 @@ function scheduleLabel(s: Schedule): string {
   return s.scheduleType
 }
 
+function SkeletonCard() {
+  return (
+    <div className="flex items-center gap-4 rounded-lg border bg-card p-4 animate-pulse">
+      <div className="h-5 w-9 rounded-full bg-muted" />
+      <div className="flex-1 space-y-2">
+        <div className="h-4 w-36 rounded bg-muted" />
+        <div className="h-3 w-52 rounded bg-muted" />
+        <div className="h-3 w-28 rounded bg-muted" />
+      </div>
+      <div className="flex gap-1">
+        <div className="h-8 w-8 rounded bg-muted" />
+        <div className="h-8 w-8 rounded bg-muted" />
+      </div>
+    </div>
+  )
+}
+
+const BUCKET_ORDER: TimelineBucket[] = ['upcoming', 'quarterly', 'half_yearly', 'yearly', 'beyond']
+
 export function Dashboard() {
-  const { schedules, loading, create, update, remove, toggle, testSend } = useSchedules()
+  const { schedules, fireTimes, loading, create, update, remove, toggle, testSend } = useScheduleContext()
+  const { toast } = useToast()
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<Schedule | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
-  const [testResult, setTestResult] = useState<string | null>(null)
+  const [confirmTestSend, setConfirmTestSend] = useState<string | null>(null)
+
+  // Group schedules by time horizon
+  const { grouped, pausedSchedules } = useMemo(() => {
+    const buckets: Record<TimelineBucket, Schedule[]> = {
+      upcoming: [], quarterly: [], half_yearly: [], yearly: [], beyond: []
+    }
+    const paused: Schedule[] = []
+
+    for (const s of schedules) {
+      if (!s.enabled) {
+        paused.push(s)
+        continue
+      }
+      const nextRun = s.scheduleType === 'one_time' ? s.scheduledAt : (fireTimes[s.id] || null)
+      const bucket = getTimelineBucket(nextRun)
+      buckets[bucket].push(s)
+    }
+
+    const result = BUCKET_ORDER
+      .filter((key) => buckets[key].length > 0)
+      .map((key) => ({ key, label: BUCKET_LABELS[key], items: buckets[key] }))
+
+    return { grouped: result, pausedSchedules: paused }
+  }, [schedules, fireTimes])
+
+  function getNextRun(s: Schedule): string | null {
+    if (s.scheduleType === 'one_time') return s.scheduledAt
+    return fireTimes[s.id] || null
+  }
 
   function handleNew() {
     setEditing(null)
@@ -60,166 +110,237 @@ export function Dashboard() {
       monthOfYear: s.monthOfYear ?? undefined,
       dryRun: s.dryRun
     })
+    toast('Schedule duplicated', 'success')
   }
 
   async function handleDelete(id: string) {
     await remove(id)
     setConfirmDelete(null)
+    toast('Schedule deleted', 'info')
   }
 
-  async function handleTestSend(id: string) {
-    setTestResult(null)
-    const result = await testSend(id)
+  async function handleTestSend(s: Schedule) {
+    // If not dry run, require confirmation first
+    if (!s.dryRun && confirmTestSend !== s.id) {
+      setConfirmTestSend(s.id)
+      return
+    }
+    setConfirmTestSend(null)
+    const result = await testSend(s.id)
     if (result) {
       if (result.success) {
-        setTestResult(result.dryRun ? 'Dry run completed' : 'Message sent')
+        toast(result.dryRun ? 'Dry run completed' : 'Message sent', 'success')
       } else {
-        setTestResult(`Failed: ${result.error || 'Unknown error'}`)
+        toast(`Failed: ${result.error || 'Unknown error'}`, 'error')
       }
     }
-    setTimeout(() => setTestResult(null), 4000)
   }
 
   async function handleSubmit(data: CreateScheduleInput) {
     if (editing) {
       await update(editing.id, data)
+      toast('Schedule updated', 'success')
     } else {
       await create(data)
+      toast('Schedule created', 'success')
     }
   }
 
+  function renderScheduleCard(s: Schedule) {
+    const nextRun = getNextRun(s)
+    return (
+      <div
+        key={s.id}
+        className="flex items-center gap-4 rounded-lg border bg-card p-4 card-hover"
+      >
+        {/* Toggle */}
+        <Switch
+          checked={s.enabled}
+          onCheckedChange={(enabled) => toggle(s.id, enabled)}
+        />
+
+        {/* Info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="font-medium text-sm">
+              {s.contactName || s.phoneNumber}
+            </span>
+            {s.contactName && (
+              <span className="text-xs text-muted-foreground">{s.phoneNumber}</span>
+            )}
+            <StatusBadge
+              status={
+                s.scheduleType === 'one_time' && !s.enabled
+                  ? 'completed'
+                  : s.enabled
+                    ? 'active'
+                    : 'paused'
+              }
+            />
+            {s.dryRun && <StatusBadge status="dry_run" />}
+          </div>
+          <p className="text-xs text-muted-foreground truncate">
+            {truncate(s.message, 80)}
+          </p>
+          <div className="flex items-center gap-3 mt-1">
+            <p className="text-xs text-muted-foreground">
+              {scheduleLabel(s)}
+            </p>
+            {nextRun && s.enabled && (
+              <span className="flex items-center gap-1 text-xs text-primary font-medium">
+                <Clock className="h-3 w-3" />
+                Next: {formatRelativeTime(nextRun)}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-1">
+          {confirmTestSend === s.id ? (
+            <div className="flex items-center gap-1">
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => handleTestSend(s)}
+              >
+                Send Now
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setConfirmTestSend(null)}
+              >
+                Cancel
+              </Button>
+            </div>
+          ) : (
+            <Button
+              variant="ghost"
+              size="icon"
+              title={s.dryRun ? 'Test Send (Dry Run)' : 'Test Send (Live!)'}
+              onClick={() => handleTestSend(s)}
+              className="transition-colors duration-150"
+            >
+              <Play className="h-4 w-4" />
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            title="Edit"
+            onClick={() => handleEdit(s)}
+            className="transition-colors duration-150"
+          >
+            <Pencil className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            title="Duplicate"
+            onClick={() => handleDuplicate(s)}
+            className="transition-colors duration-150"
+          >
+            <Copy className="h-4 w-4" />
+          </Button>
+          {confirmDelete === s.id ? (
+            <div className="flex items-center gap-1">
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => handleDelete(s.id)}
+              >
+                Confirm
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setConfirmDelete(null)}
+              >
+                Cancel
+              </Button>
+            </div>
+          ) : (
+            <Button
+              variant="ghost"
+              size="icon"
+              title="Delete"
+              onClick={() => setConfirmDelete(s.id)}
+              className="transition-colors duration-150"
+            >
+              <Trash2 className="h-4 w-4 text-destructive" />
+            </Button>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   if (loading) {
-    return <div className="p-6 text-muted-foreground">Loading schedules...</div>
+    return (
+      <div className="p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="h-7 w-48 rounded bg-muted animate-pulse" />
+          <div className="h-9 w-32 rounded bg-muted animate-pulse" />
+        </div>
+        <div className="space-y-2">
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
+        </div>
+      </div>
+    )
   }
 
   return (
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Scheduled Messages</h1>
-        <Button onClick={handleNew} size="sm">
+        <Button onClick={handleNew} size="sm" className="transition-all duration-150 hover:shadow-sm">
           <Plus className="h-4 w-4 mr-1" />
           New Schedule
         </Button>
       </div>
 
-      {/* Toast for test results */}
-      {testResult && (
-        <div className="rounded-md border bg-card px-4 py-2 text-sm shadow-sm">
-          {testResult}
-        </div>
-      )}
-
       {schedules.length === 0 ? (
-        <div className="text-center py-20 space-y-3">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-muted mb-2">
-            <CalendarClock className="h-7 w-7 text-muted-foreground" />
+        <div className="text-center py-20 space-y-4">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-2">
+            <CalendarClock className="h-8 w-8 text-primary" />
           </div>
-          <p className="text-base font-medium">No schedules yet</p>
-          <p className="text-sm text-muted-foreground max-w-xs mx-auto">
-            Create your first scheduled WhatsApp message to get started.
+          <p className="text-lg font-medium">No schedules yet</p>
+          <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+            Create your first scheduled WhatsApp message to get started. Messages will be sent automatically at the time you choose.
           </p>
-          <Button onClick={handleNew} size="sm" className="mt-2">
+          <Button onClick={handleNew} size="sm" className="mt-2 transition-all duration-150 hover:shadow-sm">
             <Plus className="h-4 w-4 mr-1" />
             New Schedule
           </Button>
         </div>
       ) : (
-        <div className="space-y-2">
-          {schedules.map((s) => (
-            <div
-              key={s.id}
-              className="flex items-center gap-4 rounded-lg border bg-card p-4 hover:shadow-sm transition-shadow"
-            >
-              {/* Toggle */}
-              <Switch
-                checked={s.enabled}
-                onCheckedChange={(enabled) => toggle(s.id, enabled)}
-              />
-
-              {/* Info */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="font-medium text-sm">
-                    {s.contactName || s.phoneNumber}
-                  </span>
-                  {s.contactName && (
-                    <span className="text-xs text-muted-foreground">{s.phoneNumber}</span>
-                  )}
-                  <StatusBadge
-                    status={
-                      s.scheduleType === 'one_time' && !s.enabled
-                        ? 'completed'
-                        : s.enabled
-                          ? 'active'
-                          : 'paused'
-                    }
-                  />
-                  {s.dryRun && <StatusBadge status="dry_run" />}
-                </div>
-                <p className="text-xs text-muted-foreground truncate">
-                  {truncate(s.message, 80)}
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {scheduleLabel(s)}
-                </p>
+        <div className="space-y-6">
+          {/* Grouped active schedules */}
+          {grouped.map(({ key, label, items }) => (
+            <div key={key}>
+              <div className="sticky top-0 z-10 bg-background/95 backdrop-blur py-2 border-b mb-3">
+                <h2 className="text-sm font-medium text-muted-foreground">{label}</h2>
               </div>
-
-              {/* Actions */}
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  title="Test Send"
-                  onClick={() => handleTestSend(s.id)}
-                >
-                  <Play className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  title="Edit"
-                  onClick={() => handleEdit(s)}
-                >
-                  <Pencil className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  title="Duplicate"
-                  onClick={() => handleDuplicate(s)}
-                >
-                  <Copy className="h-4 w-4" />
-                </Button>
-                {confirmDelete === s.id ? (
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => handleDelete(s.id)}
-                    >
-                      Confirm
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setConfirmDelete(null)}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                ) : (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    title="Delete"
-                    onClick={() => setConfirmDelete(s.id)}
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
-                )}
+              <div className="space-y-2">
+                {items.map(renderScheduleCard)}
               </div>
             </div>
           ))}
+
+          {/* Paused schedules */}
+          {pausedSchedules.length > 0 && (
+            <div>
+              <div className="sticky top-0 z-10 bg-background/95 backdrop-blur py-2 border-b mb-3">
+                <h2 className="text-sm font-medium text-muted-foreground">Paused</h2>
+              </div>
+              <div className="space-y-2">
+                {pausedSchedules.map(renderScheduleCard)}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

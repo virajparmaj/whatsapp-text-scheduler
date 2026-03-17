@@ -12,10 +12,10 @@ function Dialog({ open, onOpenChange, children }: DialogProps): React.ReactEleme
   if (!open) return null
   return (
     <div className="fixed inset-0 z-50">
-      <div className="fixed inset-0 bg-black/50" onClick={() => onOpenChange(false)} />
+      <div className="fixed inset-0 bg-black/50 animate-fade-in" onClick={() => onOpenChange(false)} />
       <div className="fixed inset-0 flex items-center justify-center p-4">
         <div
-          className="relative z-50 w-full max-w-lg rounded-lg border bg-background p-6 shadow-lg max-h-[85vh] overflow-y-auto"
+          className="relative z-50 w-full max-w-lg rounded-lg border bg-background p-6 shadow-lg max-h-[85vh] overflow-y-auto animate-fade-in"
           onClick={(e) => e.stopPropagation()}
         >
           <button

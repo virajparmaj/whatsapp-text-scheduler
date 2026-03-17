@@ -7,9 +7,10 @@ interface ScheduleModalProps {
   onOpenChange: (open: boolean) => void
   schedule?: Schedule | null
   onSubmit: (data: CreateScheduleInput) => Promise<void>
+  defaultDate?: Date
 }
 
-export function ScheduleModal({ open, onOpenChange, schedule, onSubmit }: ScheduleModalProps) {
+export function ScheduleModal({ open, onOpenChange, schedule, onSubmit, defaultDate }: ScheduleModalProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogHeader>
@@ -17,6 +18,7 @@ export function ScheduleModal({ open, onOpenChange, schedule, onSubmit }: Schedu
       </DialogHeader>
       <ScheduleForm
         initial={schedule}
+        defaultDate={defaultDate}
         onSubmit={async (data) => {
           await onSubmit(data)
           onOpenChange(false)

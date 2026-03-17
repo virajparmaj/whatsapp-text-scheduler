@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSettings } from '@/hooks/useSettings'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -8,6 +8,36 @@ import { Badge } from '@/components/ui/badge'
 import { api } from '@/lib/ipc'
 import { ShieldCheck, ShieldAlert, AlertTriangle, BookUser } from 'lucide-react'
 import type { AccessibilityStatus } from '../../shared/types'
+
+/** Debounced text input that only persists after the user stops typing. */
+function DebouncedInput({
+  value,
+  onSave,
+  ...props
+}: {
+  value: string
+  onSave: (value: string) => void
+} & Omit<React.ComponentProps<typeof Input>, 'value' | 'onChange'>) {
+  const [local, setLocal] = useState(value)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => { setLocal(value) }, [value])
+
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = e.target.value
+    setLocal(v)
+    if (timerRef.current) clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(() => onSave(v), 600)
+  }, [onSave])
+
+  // Save immediately on blur (in case user tabs away before debounce fires)
+  const handleBlur = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current)
+    onSave(local)
+  }, [local, onSave])
+
+  return <Input value={local} onChange={handleChange} onBlur={handleBlur} {...props} />
+}
 
 export function Settings() {
   const { settings, loading, updateSetting } = useSettings()
@@ -163,10 +193,10 @@ export function Settings() {
       {/* Default Country Code */}
       <div className="space-y-2">
         <Label htmlFor="country-code">Default Country Code</Label>
-        <Input
+        <DebouncedInput
           id="country-code"
           value={settings.defaultCountryCode}
-          onChange={(e) => updateSetting('default_country_code', e.target.value)}
+          onSave={(v) => updateSetting('default_country_code', v)}
           className="w-24"
           placeholder="+1"
         />
@@ -179,14 +209,14 @@ export function Settings() {
           How long to wait after opening WhatsApp before pressing Enter.
           Increase if WhatsApp is slow to load.
         </p>
-        <Input
+        <DebouncedInput
           id="delay"
           type="number"
           min={1000}
           max={15000}
           step={500}
-          value={settings.sendDelayMs}
-          onChange={(e) => updateSetting('send_delay_ms', e.target.value)}
+          value={String(settings.sendDelayMs)}
+          onSave={(v) => updateSetting('send_delay_ms', v)}
           className="w-32"
         />
       </div>
@@ -197,10 +227,10 @@ export function Settings() {
         <p className="text-xs text-muted-foreground">
           The macOS app name for AppleScript targeting. Usually "WhatsApp".
         </p>
-        <Input
+        <DebouncedInput
           id="app-name"
           value={settings.whatsappApp}
-          onChange={(e) => updateSetting('whatsapp_app', e.target.value)}
+          onSave={(v) => updateSetting('whatsapp_app', v)}
           className="w-48"
         />
       </div>

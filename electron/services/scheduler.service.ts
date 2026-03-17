@@ -6,6 +6,9 @@ import type { Schedule, RunLog } from '../../shared/types'
 // In-memory map of active node-schedule jobs
 const jobs = new Map<string, schedule.Job>()
 
+// Mutex: set of schedule IDs currently executing (prevents double-send)
+const executing = new Set<string>()
+
 // Callback for notifying the renderer when a job executes
 let onExecutedCallback: ((log: RunLog) => void) | null = null
 
@@ -14,16 +17,44 @@ export function setOnExecutedCallback(cb: (log: RunLog) => void): void {
 }
 
 /**
- * Initialize scheduler: load all enabled schedules from DB and register jobs.
+ * Initialize scheduler: load all enabled schedules from DB, register jobs,
+ * and detect missed one-time schedules.
  */
 export function initScheduler(): void {
   const schedules = getAllSchedules()
   for (const s of schedules) {
-    if (s.enabled) {
-      registerJob(s)
+    if (!s.enabled) continue
+
+    // Detect missed one-time schedules (past date, still enabled = app was closed)
+    if (s.scheduleType === 'one_time' && s.scheduledAt) {
+      const fireDate = new Date(s.scheduledAt)
+      if (fireDate <= new Date()) {
+        insertRunLog(s.id, 'skipped', 'Missed: app was not running at scheduled time', undefined, s.scheduledAt)
+        toggleSchedule(s.id, false)
+        console.log(`Missed one-time schedule ${s.id} — marked as skipped`)
+        continue
+      }
     }
+
+    registerJob(s)
   }
   console.log(`Scheduler initialized: ${jobs.size} active jobs`)
+}
+
+/**
+ * Re-sync all jobs after sleep/wake. Cancels existing timers and re-registers
+ * from DB state, also detecting any schedules missed during sleep.
+ */
+export function resyncAfterWake(): void {
+  console.log('Resyncing scheduler after wake...')
+  // Cancel all existing jobs
+  for (const [, job] of jobs) {
+    job.cancel()
+  }
+  jobs.clear()
+
+  // Re-initialize (also catches missed one-time schedules)
+  initScheduler()
 }
 
 /**
@@ -134,38 +165,54 @@ export function rescheduleJob(scheduleId: string): void {
 
 /**
  * Execute a scheduled job: send the WhatsApp message and log the result.
+ * Uses a mutex to prevent double-sends from overlapping timer + manual triggers.
  */
 async function executeJob(scheduleId: string): Promise<RunLog | null> {
-  const s = getScheduleById(scheduleId)
-  if (!s) return null
+  // Mutex: skip if already executing this schedule
+  if (executing.has(scheduleId)) {
+    console.warn(`Schedule ${scheduleId} is already executing, skipping duplicate`)
+    return null
+  }
 
-  if (!s.enabled) {
-    const log = insertRunLog(scheduleId, 'skipped', 'Schedule is disabled')
+  executing.add(scheduleId)
+  try {
+    const s = getScheduleById(scheduleId)
+    if (!s) return null
+
+    const scheduledTime = new Date().toISOString()
+
+    if (!s.enabled) {
+      const log = insertRunLog(scheduleId, 'skipped', 'Schedule is disabled', undefined, scheduledTime)
+      if (onExecutedCallback) onExecutedCallback(log)
+      return log
+    }
+
+    const startTime = Date.now()
+    const result = await sendWhatsAppMessage(s.phoneNumber, s.message, s.dryRun)
+    const durationMs = Date.now() - startTime
+
+    let status: 'success' | 'failed' | 'dry_run'
+    if (result.dryRun) {
+      status = 'dry_run'
+    } else if (result.success) {
+      status = 'success'
+    } else {
+      status = 'failed'
+    }
+
+    const log = insertRunLog(scheduleId, status, result.error, durationMs, scheduledTime)
+
+    // Auto-disable one-time schedules after any execution attempt (not just success)
+    if (s.scheduleType === 'one_time') {
+      toggleSchedule(s.id, false)
+      cancelJob(s.id)
+    }
+
     if (onExecutedCallback) onExecutedCallback(log)
     return log
+  } finally {
+    executing.delete(scheduleId)
   }
-
-  const result = await sendWhatsAppMessage(s.phoneNumber, s.message, s.dryRun)
-
-  let status: 'success' | 'failed' | 'dry_run'
-  if (result.dryRun) {
-    status = 'dry_run'
-  } else if (result.success) {
-    status = 'success'
-  } else {
-    status = 'failed'
-  }
-
-  const log = insertRunLog(scheduleId, status, result.error)
-
-  // Auto-disable one-time schedules after execution
-  if (s.scheduleType === 'one_time' && result.success) {
-    toggleSchedule(s.id, false)
-    cancelJob(s.id)
-  }
-
-  if (onExecutedCallback) onExecutedCallback(log)
-  return log
 }
 
 /**
@@ -185,10 +232,22 @@ export function getNextFireTime(scheduleId: string): Date | null {
 }
 
 /**
+ * Get next fire times for all active jobs.
+ */
+export function getAllNextFireTimes(): Record<string, string | null> {
+  const result: Record<string, string | null> = {}
+  for (const [id, job] of jobs) {
+    const next = job.nextInvocation()
+    result[id] = next ? next.toDate().toISOString() : null
+  }
+  return result
+}
+
+/**
  * Shutdown: cancel all jobs.
  */
 export function shutdownScheduler(): void {
-  for (const [id, job] of jobs) {
+  for (const [, job] of jobs) {
     job.cancel()
   }
   jobs.clear()

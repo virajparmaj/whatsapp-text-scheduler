@@ -4,11 +4,21 @@ import { checkAccessibility, openAccessibilitySettings } from '../services/whats
 
 export function registerSettingsHandlers(): void {
   ipcMain.handle('settings:getAll', () => {
-    return db.getSettings()
+    try {
+      return db.getSettings()
+    } catch (err) {
+      console.error('[settings:getAll]', err)
+      throw err
+    }
   })
 
   ipcMain.handle('settings:update', (_, key: string, value: string) => {
-    db.updateSetting(key, value)
+    try {
+      db.updateSetting(key, value)
+    } catch (err) {
+      console.error('[settings:update]', err)
+      throw err
+    }
   })
 
   ipcMain.handle('system:checkAccessibility', async () => {

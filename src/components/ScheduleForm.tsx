@@ -48,16 +48,42 @@ function buildSummaryText(
 
 interface ScheduleFormProps {
   initial?: Schedule | null
+  defaultDate?: Date
   onSubmit: (data: CreateScheduleInput) => Promise<void>
   onCancel: () => void
 }
 
-export function ScheduleForm({ initial, onSubmit, onCancel }: ScheduleFormProps) {
+export function ScheduleForm({ initial, defaultDate, onSubmit, onCancel }: ScheduleFormProps) {
+  // Pre-fill scheduledAt from defaultDate if provided (for calendar click-to-create)
+  function getInitialScheduledAt(): string {
+    if (initial?.scheduledAt) return initial.scheduledAt
+    if (defaultDate) {
+      // Set default time to 09:00 on the selected date
+      const d = new Date(defaultDate)
+      d.setHours(9, 0, 0, 0)
+      const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+        .toISOString()
+        .slice(0, 16)
+      return local
+    }
+    return ''
+  }
+
+  // Pre-fill country code for new schedules
+  const [defaultCountryCode, setDefaultCountryCode] = useState('')
+  useEffect(() => {
+    if (!initial) {
+      api.getSettings().then((s) => {
+        if (s.defaultCountryCode) setDefaultCountryCode(s.defaultCountryCode)
+      }).catch(() => {})
+    }
+  }, [initial])
+
   const [phoneNumber, setPhoneNumber] = useState(initial?.phoneNumber || '')
   const [contactName, setContactName] = useState(initial?.contactName || '')
   const [message, setMessage] = useState(initial?.message || '')
   const [scheduleType, setScheduleType] = useState<ScheduleType>(initial?.scheduleType || 'one_time')
-  const [scheduledAt, setScheduledAt] = useState(initial?.scheduledAt || '')
+  const [scheduledAt, setScheduledAt] = useState(getInitialScheduledAt())
   const [timeOfDay, setTimeOfDay] = useState(initial?.timeOfDay || '09:00')
   const [dayOfWeek, setDayOfWeek] = useState(initial?.dayOfWeek ?? 1)
   const [dryRun, setDryRun] = useState(initial?.dryRun || false)
@@ -295,12 +321,18 @@ export function ScheduleForm({ initial, onSubmit, onCancel }: ScheduleFormProps)
           </Label>
           <Input
             id="phone"
-            placeholder="+1234567890"
+            placeholder={defaultCountryCode ? `${defaultCountryCode}1234567890` : '+1234567890'}
             value={phoneNumber}
             onChange={(e) => {
               setPhoneNumber(e.target.value)
               // If user edits manually, clear the contact link
               if (selectedContact) setSelectedContact(null)
+            }}
+            onFocus={() => {
+              // Auto-fill country code on first focus if phone is empty
+              if (!phoneNumber && defaultCountryCode && !initial) {
+                setPhoneNumber(defaultCountryCode)
+              }
             }}
             className={cn(selectedContact && 'border-green-400/60')}
           />

@@ -1,7 +1,7 @@
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, shell, powerMonitor, Notification } from 'electron'
 import { join } from 'path'
 import { initDb, closeDb } from './services/db.service'
-import { initScheduler, setOnExecutedCallback, shutdownScheduler } from './services/scheduler.service'
+import { initScheduler, setOnExecutedCallback, shutdownScheduler, resyncAfterWake } from './services/scheduler.service'
 import { registerAllHandlers } from './ipc/handlers'
 import type { RunLog } from '../shared/types'
 
@@ -48,11 +48,28 @@ app.whenReady().then(() => {
   // Initialize scheduler
   initScheduler()
 
-  // Push execution events to renderer
+  // Push execution events to renderer + show native notification
   setOnExecutedCallback((log: RunLog) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('schedule:executed', log)
     }
+
+    if (Notification.isSupported()) {
+      const title = log.status === 'success' ? 'Message Sent'
+        : log.status === 'dry_run' ? 'Dry Run Complete'
+        : log.status === 'failed' ? 'Send Failed'
+        : 'Schedule Skipped'
+      const body = log.status === 'failed'
+        ? (log.errorMessage || 'Unknown error')
+        : (log.contactName || log.phoneNumber || log.scheduleId)
+      new Notification({ title, body }).show()
+    }
+  })
+
+  // Re-sync scheduler after macOS sleep/wake to catch missed timers
+  powerMonitor.on('resume', () => {
+    console.log('System resumed from sleep — resyncing scheduler')
+    resyncAfterWake()
   })
 
   createWindow()

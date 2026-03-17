@@ -23,9 +23,23 @@ export async function sendWhatsAppMessage(
   const isDryRun = dryRun || settings.globalDryRun
 
   try {
+    // Step 0: Check if WhatsApp is installed/running
+    const appName = settings.whatsappApp
+    try {
+      const checkScript = `tell application "System Events" to (name of processes) contains "${appName}"`
+      const running = await runAppleScript(checkScript)
+      if (running.trim() === 'false') {
+        // Try to launch it and give it a moment to start
+        await runCommand('open', ['-a', appName])
+        await sleep(2000)
+      }
+    } catch {
+      // If we can't check, proceed anyway — the URL scheme will attempt to launch it
+    }
+
     // Step 1: Build the whatsapp:// URL and open it
     // Strip any non-digit chars except leading +
-    const cleanNumber = phoneNumber.replace(/[^\d]/g, '')
+    const cleanNumber = phoneNumber.replace(/[^\d+]/g, '')
     const encodedMessage = encodeURIComponent(message)
     const url = `whatsapp://send?phone=${cleanNumber}&text=${encodedMessage}`
 
@@ -39,7 +53,6 @@ export async function sendWhatsAppMessage(
     }
 
     // Step 3: Activate WhatsApp and press Enter to send
-    const appName = settings.whatsappApp
     const sendScript = `
       tell application "${appName}" to activate
       delay 0.5

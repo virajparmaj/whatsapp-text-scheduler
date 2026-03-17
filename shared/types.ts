@@ -41,6 +41,8 @@ export interface RunLog {
   errorMessage: string | null
   firedAt: string
   completedAt: string | null
+  executionDuration?: number  // milliseconds
+  scheduledTime?: string      // ISO 8601 intended fire time
   // joined from schedule for display
   phoneNumber?: string
   contactName?: string
@@ -82,6 +84,7 @@ export interface ElectronAPI {
   deleteSchedule(id: string): Promise<void>
   toggleSchedule(id: string, enabled: boolean): Promise<Schedule>
   testSend(id: string): Promise<SendResult>
+  getNextFireTimes(): Promise<Record<string, string | null>>
 
   // Logs
   getLogs(limit?: number): Promise<RunLog[]>
