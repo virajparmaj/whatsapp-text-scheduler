@@ -1,6 +1,21 @@
 # WhaTime
 
+<div align="center">
+  <img src="./resources/WhaTime.png" alt="WhaTime Logo" width="128" height="128" />
+</div>
+
 A local macOS desktop app for scheduling WhatsApp messages. No cloud backend, no unofficial APIs — just local scheduling + macOS automation.
+
+## What It Does
+
+**WhaTime** lets you schedule WhatsApp messages to be sent automatically at specific times. Perfect for:
+- Sending reminders to contacts at scheduled times
+- Daily/weekly recurring messages (motivation quotes, check-ins, reminders)
+- One-time scheduled messages for later
+- Quarterly, half-yearly, or yearly recurring messages
+- Testing messages before they go live (Dry Run mode)
+
+All scheduling happens locally on your Mac — no data leaves your computer.
 
 ## How It Works
 
@@ -22,6 +37,38 @@ A local macOS desktop app for scheduling WhatsApp messages. No cloud backend, no
 - Opens WhatsApp with the message pre-filled but does NOT press Enter
 - Lets you visually verify the message before enabling live sends
 
+## User Interface
+
+WhaTime features a clean, intuitive macOS-native interface built with React + Tailwind CSS:
+
+### Dashboard
+- **Schedule List** — View all your scheduled messages at a glance
+- **Status Badges** — Shows if a schedule is enabled/disabled, with next fire time
+- **Quick Actions** — Toggle, edit, duplicate, test, or delete schedules
+- **Search & Filter** — Search by contact name, phone number, or message content
+- **Sorting Options** — Sort by next fire time, contact name, creation date, or last updated
+- **Skeleton Loading** — Smooth loading states while fetching data
+
+### Schedule Creation Modal
+- Enter recipient's **contact name** and **phone number**
+- Type your **message** (displayed with character count)
+- Choose **schedule type**: One-time, Daily, Weekly, Quarterly, Half-yearly, or Yearly
+- Set **date/time** with date and time pickers
+- Toggle **Dry Run** mode per-schedule
+- Create button with confirmation
+
+### Activity/Logs Tab
+- View **execution history** for all scheduled messages
+- See **success/failed/dry-run** status for each send
+- Timestamps for when messages were sent (or attempted)
+- Filter and search through past activity
+
+### Settings Tab
+- **Global Dry Run Toggle** — Test all messages without sending
+- **Accessibility Check** — Verify your app has permission to send keystrokes
+- **Quick link** to macOS System Settings for Accessibility permissions
+- **App Status** — Displays current configuration and database state
+
 ## Tech Stack
 
 | Layer | Technology |
@@ -41,55 +88,91 @@ A local macOS desktop app for scheduling WhatsApp messages. No cloud backend, no
 
 ## Prerequisites
 
-- macOS (Apple Silicon or Intel)
-- Node.js 18+
-- WhatsApp Desktop installed and logged in
-- **Accessibility permission** granted to the app (required for System Events keystrokes)
+- **macOS** (Apple Silicon M1/M2/M3 or Intel)
+- **Node.js 18+** (download from [nodejs.org](https://nodejs.org))
+- **WhatsApp Desktop** installed and logged in ([download here](https://www.whatsapp.com/download))
+- **Accessibility permission** granted to the app (required for sending keystrokes)
 
-## Setup
+## Installation & Setup
+
+### Step 1: Clone or Download the Project
 
 ```bash
-# Install dependencies
+# Clone the repository
+git clone <repository-url> whatsapp-text-scheduler
+cd whatsapp-text-scheduler
+```
+
+### Step 2: Install Dependencies
+
+```bash
 npm install
+```
 
-# Rebuild native modules for Electron
+### Step 3: Rebuild Native Modules
+
+WhaTime uses `better-sqlite3` which requires compilation for Electron:
+
+```bash
 npm run rebuild
+```
 
-# Start in development mode
+### Step 4: Run in Development Mode
+
+```bash
 npm run dev
 ```
 
-## Accessibility Permission
+This will:
+- Start the Electron app
+- Open the WhaTime window with a fresh database at `~/Library/Application Support/whatsapp-text-scheduler/schedules.db`
+- Hot-reload enabled for development
 
-The app needs Accessibility permission to send keystrokes to WhatsApp via System Events.
+### Step 5: Grant Accessibility Permission
 
-1. Open **System Settings > Privacy & Security > Accessibility**
-2. Click the lock icon to make changes
-3. Add the Electron app (in dev mode, this is the Electron binary)
-4. The Settings page in the app has a "Check" button and a link to open System Settings
+The app needs permission to send keystrokes to WhatsApp. Follow these steps:
 
-## Usage
+1. **Open System Settings** on your Mac
+2. Go to **Privacy & Security** → **Accessibility**
+3. Click the lock icon to unlock changes
+4. Click the **+** button and add the Electron app:
+   - In dev mode: look for "Electron Helper"
+   - After building: look for "WhaTime"
+5. Toggle it **ON** in the list
+6. You can verify this in WhaTime's **Settings tab** — there's a "Check" button that confirms permission
 
-### Creating a Schedule
-1. Click **New Schedule** on the Dashboard
-2. Enter the recipient's phone number (with country code, e.g., +14155551234)
+### Step 6: Create Your First Schedule
+
+1. Click **New Schedule** or press **Cmd+N**
+2. Enter a contact name and phone number (e.g., `+14155551234`)
 3. Type your message
-4. Choose schedule type: One-time, Daily, or Weekly
+4. Choose a schedule type (One-time, Daily, Weekly, etc.)
 5. Set the date/time
-6. Optionally enable Dry Run
+6. Optionally enable **Dry Run** to test first
 7. Click **Create**
 
-### Testing Safely
-1. Enable **Dry Run** on the schedule (or use Global Dry Run in Settings)
-2. Click the **Play** button on any schedule to test immediately
-3. WhatsApp will open with the message pre-filled, but won't send
-4. Check the Activity tab for the dry-run log entry
+### Step 7: Test with Dry Run
 
-### Managing Schedules
-- **Toggle** the switch to enable/disable a schedule
-- **Edit** (pencil icon) to modify
-- **Duplicate** (copy icon) to create a copy
-- **Delete** (trash icon) with confirmation
+1. Toggle **Dry Run** in Settings (or per-schedule)
+2. Click the **Play button** on a schedule to test immediately
+3. WhatsApp will open with your message pre-filled
+4. Check the **Activity tab** to see the dry-run log
+5. When confident, disable Dry Run and the schedule will send live
+
+## Building for Production
+
+To build a standalone macOS app:
+
+```bash
+npm run build
+```
+
+This creates a `.dmg` installer in the `dist/` folder. The built app:
+- Runs as a standard macOS application
+- Can be moved to `/Applications`
+- Has the full WhaTime icon and branding
+- Still requires Accessibility permission to send messages
+
 
 ## Known Limitations
 
@@ -124,9 +207,3 @@ shared/
   types.ts                 # TypeScript types shared across IPC
 ```
 
-## Build
-
-```bash
-# Production build
-npm run build
-```
