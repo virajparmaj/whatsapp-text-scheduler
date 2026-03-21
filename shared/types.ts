@@ -15,6 +15,7 @@ export interface Schedule {
   monthOfYear: number | null // 0=Jan, ..., 11=Dec for quarterly/half_yearly/yearly
   enabled: boolean
   dryRun: boolean
+  lastFiredAt: string | null // ISO 8601 timestamp of last execution
   createdAt: string
   updatedAt: string
 }
@@ -43,6 +44,8 @@ export interface RunLog {
   completedAt: string | null
   executionDuration?: number  // milliseconds
   scheduledTime?: string      // ISO 8601 intended fire time
+  retryAttempt?: number       // 0 = first try, 1+ = retries
+  retryOf?: string            // original run_log.id if this is a retry
   // joined from schedule for display
   phoneNumber?: string
   contactName?: string
@@ -54,6 +57,8 @@ export interface AppSettings {
   defaultCountryCode: string
   sendDelayMs: number
   whatsappApp: string
+  openAtLogin: boolean
+  maxRetries: number
 }
 
 export interface SendResult {

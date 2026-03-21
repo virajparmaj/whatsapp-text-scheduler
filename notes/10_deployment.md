@@ -1,71 +1,61 @@
 # 10 — Deployment
 
+## Purpose
+Document how this project is built and distributed based on current repository evidence.
+
 ## Status
+- **Confirmed from code**: macOS desktop packaging workflow via electron-builder.
+- **Not found in repository**: Vercel/Netlify/Render/Supabase deployment configs, backend hosting, CI release pipeline.
 
-Confirmed from code — `package.json` (electron-builder config), `electron.vite.config.ts`.
+## Confirmed from code
 
-This is a local macOS desktop app. There is no cloud deployment, no server, no CI/CD pipeline found in the repository.
+### Deployment target
+- Single packaged Electron app for macOS (`.app`/`.dmg` style packaging via electron-builder).
+- Local SQLite database stored on each user's machine.
+- No separate frontend/backend deployment units.
 
-## Deployment Target
-
-| Layer | Target |
-|---|---|
-| Frontend + Backend | Packaged as a macOS `.app` via electron-builder |
-| Database | Local SQLite file on user's machine |
-| Scheduling | In-process node-schedule within the Electron main process |
-| Automation | Local AppleScript via macOS `osascript` |
-
-## Build Commands
-
+### Build and package commands
 ```bash
-# 1. Build all bundles
 npm run build
-
-# 2. Package as macOS app (produces dist/ with .dmg and .app)
 npx electron-builder --mac
 ```
 
-## electron-builder Config (`package.json`)
+### Packaging config clues (`package.json`)
+- `appId`: `com.veer.wa-scheduler`
+- `productName`: `WA Scheduler`
+- macOS icon/category configured.
 
-```json
-{
-  "build": {
-    "appId": "com.veer.wa-scheduler",
-    "productName": "WA Scheduler",
-    "mac": {
-      "icon": "resources/icon.png",
-      "category": "public.app-category.productivity"
-    }
-  }
-}
-```
+### Environment separation
+- No staging/prod env split implemented.
+- No remote secrets/environment management layer in repo.
 
-- No code signing config present (strongly inferred: not signed for distribution, runs with Gatekeeper warning on other machines).
-- No `asar` exclusion config for `better-sqlite3` native binary — may need explicit exclusion for packaged builds to work correctly. **This is a potential packaging risk**.
-- No auto-update config (no `electron-updater` dependency).
+### Deployment dependencies
+- Native module compatibility (`better-sqlite3`) with Electron version/arch.
+- Target machine must satisfy runtime requirements:
+  - WhatsApp Desktop installed/logged in
+  - Accessibility permission granted
+  - Unlocked macOS session at send time
 
-## Environment Separation
+## Inferred / proposed
+- **Strongly inferred** distribution is currently personal/internal, not formal public release.
+- **Strongly inferred** code signing/notarization is not configured in repository.
 
-Not applicable. No staging/production environments. Single local user.
+## Important details
+- App behavior depends on local automation capabilities, so “deployment success” requires post-install permission checks.
+- Scheduler only runs while app process is active.
 
-## Distribution
+## Open issues / gaps
+- Potential packaging risk from native module handling and asar settings.
+- No automated release validation/smoke test workflow.
+- No auto-update channel configured.
 
-No public distribution channel (App Store, GitHub Releases, Homebrew) is set up. Personal use only.
+## Recommended next steps
+1. Add documented post-package smoke test checklist (launch, schedule, send, log, permissions).
+2. Validate native module packaging on both arm64 and x64 targets.
+3. Add signing/notarization plan if wider distribution is planned.
 
-To distribute to another machine:
-1. Run `npx electron-builder --mac` on a Mac.
-2. Copy the `.dmg` from `dist/` to the target machine.
-3. Target machine must also have WhatsApp Desktop installed.
-4. Target machine user must grant Accessibility and Contacts permissions to the app.
-
-## Known Deployment Risks
-
-1. **Native module packaging**: `better-sqlite3` must be correctly bundled for the target architecture (Apple Silicon vs Intel). `electron-builder` usually handles this, but the `postinstall` script (`electron-builder install-app-deps`) must run.
-
-2. **No code signing**: Without a Developer ID certificate, macOS Gatekeeper will block the app on first launch. User must right-click → Open → confirm.
-
-3. **Architecture mismatch**: Builds for Apple Silicon (arm64) won't run on Intel (x64) and vice versa unless a universal binary is configured. No universal build config is present.
-
-4. **No auto-update**: Users must manually rebuild and replace the app for updates.
-
-5. **asar packaging**: Native binaries (`.node` files) may need to be excluded from asar archive. Not explicitly configured — test packaged builds carefully.
+## Recommended release order (if packaging changes are made)
+1. Rebuild native deps (`npm run rebuild`).
+2. Build bundles (`npm run build`).
+3. Package app (`electron-builder --mac`).
+4. Run local install smoke tests on clean profile.

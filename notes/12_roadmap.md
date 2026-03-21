@@ -1,113 +1,51 @@
 # 12 — Roadmap
 
+## Purpose
+Provide a practical, repo-specific plan of improvements aligned with current architecture.
+
 ## Status
+- Roadmap items are **proposed**.
+- Priorities are based on confirmed implementation gaps and risks.
 
-Grounded in confirmed code gaps and inferred product needs. All items below are proposed, not implemented unless noted.
+## Confirmed from code
+- Local-only Electron architecture (no external backend) is already implemented.
+- Scheduler, DB, and IPC are functional but have reliability/contract hardening opportunities.
+- Current gaps include test coverage absence and one known IPC/type mismatch (`testSend`).
 
----
+## Immediate fixes (high impact)
+1. Align `testSend` API contract across shared types, IPC, and UI handling.
+2. Consolidate schema source of truth (runtime SCHEMA vs `electron/db/schema.sql`).
+3. Add settings-key validation guard in `settings:update` handler.
+4. Add explicit reliability notice in schedule creation UX (app running, permissions, unlocked session).
 
-## Immediate Fixes (High Impact, Low Effort)
+## Short-term improvements
+1. Implement retry/backoff for failed sends with configurable limits.
+2. Add recurring missed-run handling strategy (explicit skip logs or replay policy).
+3. Add preflight diagnostics screen (Accessibility, Contacts, WhatsApp installed/running check).
+4. Add automated tests for DB mapping, scheduler recurrence registration, and IPC boundaries.
 
-1. **Wrap IPC handlers in try/catch**
-   - Files: `electron/ipc/*.ipc.ts`
-   - Return `{ success, error }` envelopes to renderer.
-   - Prevents silent failures and generic Electron error messages.
+## Medium-term improvements
+1. Add import/export for schedules and settings.
+2. Add template messages and faster schedule authoring flows.
+3. Improve Calendar with execution-state overlays and drill-down history.
+4. Harden packaging/release checks for native module compatibility on multiple architectures.
 
-2. **Fix asar packaging for better-sqlite3**
-   - Add `"asarUnpack": ["node_modules/better-sqlite3/**"]` to electron-builder config in `package.json`.
-   - Required for packaged `.app` to work reliably.
+## Long-term enhancements
+1. Optional background execution model (LaunchAgent/service mode).
+2. Optional tray/menu-bar experience for always-on scheduling.
+3. Optional signed/notarized distribution workflow for broader sharing.
 
-3. **Add system notification on send result**
-   - File: `electron/services/scheduler.service.ts`
-   - Use Electron `Notification` API after `executeJob()` completes.
-   - Show success or failure notification even when app window is minimised.
+## Inferred / proposed
+- **Strongly inferred** roadmap should preserve local-first architecture unless explicit product expansion requires cloud services.
 
-4. **Show permission-denied hint in contact search dropdown**
-   - File: `electron/ipc/contacts.ipc.ts`, `src/components/ScheduleForm.tsx`
-   - Return `{ results: [], permissionDenied: boolean }` instead of `Contact[]`.
-   - Show "Grant Contacts access in Settings →" if denied.
+## Important details
+- Current stack is well-suited for incremental hardening without major rewrites.
+- Reliability and contract correctness are the highest leverage investments first.
 
-5. **Auto-dismiss test send result with toast**
-   - Replace inline result string in `Dashboard.tsx` with a proper toast (sonner or similar).
-   - Prevents stale result showing after list refresh.
+## Open issues / gaps
+- No explicit acceptance criteria/tracking system exists in repo for roadmap execution.
 
----
-
-## Short-Term Improvements
-
-6. **Dark mode support**
-   - Add `dark:` CSS variable overrides in `src/index.css`.
-   - Tailwind config already has `darkMode: 'class'`.
-
-7. **Archive completed one-time schedules**
-   - Auto-move one-time schedules to a "Done" section or allow one-click clear.
-   - Reduces Dashboard clutter.
-
-8. **Loading skeletons**
-   - Add skeleton rows while `useSchedules` / `useLogs` are fetching.
-   - Eliminates blank-state flash on tab switch.
-
-9. **Missed-run detection on startup**
-   - On `initScheduler()`, check for one-time schedules whose `scheduled_at` has passed but `enabled` is still true.
-   - Log them as `skipped` with a note that the app was not running.
-
-10. **Retry logic for failed sends**
-    - Add `retryCount` and `retryDelayMs` fields to `AppSettings`.
-    - In `executeJob()`, retry N times with exponential back-off on failure.
-
----
-
-## Medium-Term Improvements
-
-11. **macOS LaunchAgent for background scheduling**
-    - Create a separate lightweight Node.js daemon that runs independently of the Electron window.
-    - Register as a LaunchAgent so it starts on login and survives app window close.
-    - Electron app communicates with daemon via local socket or SQLite polling.
-
-12. **Message templates**
-    - Add a `templates` table in SQLite.
-    - Template picker in `ScheduleForm`.
-
-13. **Export / import schedules**
-    - Export all schedules as JSON.
-    - Import from JSON (merge or replace).
-    - Useful for backup before OS reinstall.
-
-14. **Schedule preview / next-run display**
-    - Show "Next run: Thu Mar 19 at 09:00" on each schedule row.
-    - Requires computing next fire time from node-schedule RecurrenceRule.
-
-15. **Conflict / overlap detection**
-    - Warn if two schedules target the same phone number within a short window (e.g., 1 minute).
-
-16. **Unit tests**
-    - Add vitest.
-    - Test: `db.service.ts` CRUD, `scheduler.service.ts` job registration logic, `applescript.ts` parsing, utility functions.
-
----
-
-## Long-Term / Product Enhancements
-
-17. **System tray / menu bar icon**
-    - Use Electron `Tray` API.
-    - Allow app to be hidden from Dock but remain running in menu bar.
-    - Quick-access to "Next scheduled send" from tray menu.
-
-18. **Multiple recipients per schedule**
-    - Add recipients as an array in the schedule.
-    - Requires sequential sends (one per recipient) to avoid overwhelming WhatsApp automation.
-
-19. **Calendar view**
-    - Visual month/week calendar showing upcoming scheduled messages.
-
-20. **Log retention policy**
-    - Auto-clear logs older than N days (configurable in Settings).
-    - Currently only manual clear is available.
-
-21. **Code signing + notarisation**
-    - Add Apple Developer ID for distribution to other machines without Gatekeeper warning.
-    - Required for sharing the app.
-
-22. **Universal binary build**
-    - Configure electron-builder for `"arch": ["x64", "arm64"]` or `"universal"` target.
-    - Current build only targets the build machine's architecture.
+## Recommended next steps
+1. Convert immediate fixes into tracked issues with owners and target dates.
+2. Add a minimal test baseline before implementing larger feature work.
+3. Revisit roadmap after reliability milestone completion.

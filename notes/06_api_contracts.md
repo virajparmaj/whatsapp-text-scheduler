@@ -1,239 +1,71 @@
 # 06 — API Contracts
 
+## Purpose
+Document the frontend/backend contract surface that exists in this repo.
+
 ## Status
-
-Confirmed from code. There is no HTTP API. All "API" is Electron IPC between renderer and main process. Contracts are typed in `shared/types.ts` and enforced via TypeScript.
-
-The renderer calls `window.api.*` (exposed by `electron/preload.ts` via `contextBridge`). Each call resolves to `ipcRenderer.invoke(channel, ...args)` and returns a Promise.
-
----
-
-## IPC Channels
-
-### Schedule Operations
-
-#### `schedule:getAll`
-
-```
-Input:  none
-Output: Schedule[]
-```
-
-#### `schedule:get`
-
-```
-Input:  id: string
-Output: Schedule | undefined
-```
-
-#### `schedule:create`
-
-```
-Input: CreateScheduleInput {
-  phoneNumber:   string        // required
-  contactName?:  string        // optional display name
-  message:       string        // required
-  scheduleType:  ScheduleType  // 'one_time' | 'daily' | 'weekly' | 'quarterly' | 'half_yearly' | 'yearly'
-  scheduledAt?:  string        // ISO 8601, one_time only
-  timeOfDay?:    string        // "HH:mm", daily/weekly/extended
-  dayOfWeek?:    number        // 0–6, weekly only
-  dayOfMonth?:   number        // 1–28, quarterly/half_yearly/yearly
-  monthOfYear?:  number        // 0–11, yearly only
-  dryRun?:       boolean       // default false
-}
-Output: Schedule               // full record with id, timestamps
-```
-
-Side effect: If `enabled` is true (default), registers a node-schedule job immediately.
-
-#### `schedule:update`
-
-```
-Input:  id: string, data: UpdateScheduleInput {
-  phoneNumber?:  string
-  contactName?:  string
-  message?:      string
-  scheduleType?: ScheduleType
-  scheduledAt?:  string
-  timeOfDay?:    string
-  dayOfWeek?:    number
-  dayOfMonth?:   number
-  monthOfYear?:  number
-  enabled?:      boolean
-  dryRun?:       boolean
-}
-Output: Schedule
-```
-
-Side effect: Cancels and re-registers the schedule's job.
-
-#### `schedule:delete`
-
-```
-Input:  id: string
-Output: void
-```
-
-Side effect: Cancels job, cascade-deletes run_logs.
-
-#### `schedule:toggle`
-
-```
-Input:  id: string, enabled: boolean
-Output: Schedule
-```
-
-Side effect: Cancels job if disabling; registers job if enabling.
-
-#### `schedule:testSend`
-
-```
-Input:  id: string
-Output: void
-```
-
-Side effect: Immediately executes the schedule's job (same path as scheduled execution). Logs result. Fires `schedule:executed` event to renderer.
-
----
-
-### Log Operations
-
-#### `logs:getAll`
-
-```
-Input:  limit?: number  // default 200
-Output: RunLog[] {
-  id:           string
-  scheduleId:   string
-  status:       RunStatus   // 'success' | 'failed' | 'dry_run' | 'skipped'
-  errorMessage: string | null
-  firedAt:      string      // ISO 8601
-  completedAt:  string      // ISO 8601
-  contactName:  string      // joined from schedules table
-  message:      string      // joined from schedules table
-}
-```
-
-#### `logs:bySchedule`
-
-```
-Input:  scheduleId: string
-Output: RunLog[]
-```
-
-#### `logs:clear`
-
-```
-Input:  olderThanDays?: number  // if omitted, clears all
-Output: void
-```
-
----
-
-### Settings Operations
-
-#### `settings:getAll`
-
-```
-Input:  none
-Output: AppSettings {
-  globalDryRun:       boolean
-  defaultCountryCode: string   // e.g. "+1"
-  sendDelayMs:        number   // e.g. 3000
-  whatsappApp:        string   // e.g. "WhatsApp"
-}
-```
-
-#### `settings:update`
-
-```
-Input:  key: string, value: string
-Output: void
-```
-
-Valid keys: `'global_dry_run'`, `'default_country_code'`, `'send_delay_ms'`, `'whatsapp_app'`
-All values are strings (the callers serialise booleans as `'0'`/`'1'`).
-
----
-
-### System Operations
-
-#### `system:checkAccessibility`
-
-```
-Input:  none
-Output: AccessibilityStatus {
-  granted: boolean
-  error?:  string
-}
-```
-
-Executes a test AppleScript to probe Accessibility permission. If denied, sets `granted: false` and includes the OS error string.
-
-#### `system:openAccessibilityPrefs`
-
-```
-Input:  none
-Output: void
-```
-
-Opens `x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility`.
-
----
-
-### Contact Operations
-
-#### `contacts:search`
-
-```
-Input:  query: string   // minimum 2 characters
-Output: Contact[] {
-  name:        string
-  phoneNumber: string
-  phoneLabel:  string   // e.g. "mobile", "home", "work"
-}
-```
-
-Max 15 results. Returns `[]` if Contacts permission is denied (no error thrown).
-
-#### `contacts:checkAccess`
-
-```
-Input:  none
-Output: boolean   // true if Contacts permission is granted
-```
-
-#### `contacts:openSettings`
-
-```
-Input:  none
-Output: void
-```
-
-Opens `x-apple.systempreferences:com.apple.preference.security?Privacy_Contacts`.
-
----
-
-## Push Events (Main → Renderer)
-
-#### `schedule:executed`
-
-Fired by main process after every job execution (scheduled or manual test-send).
-
-```
-Payload: {
-  scheduleId: string
-  status:     RunStatus
-  error?:     string
-}
-```
-
-Renderer listeners registered via `window.api.onScheduleExecuted(callback)`. Used by `useSchedules` and `useLogs` hooks to trigger refresh without polling.
-
----
-
-## Error Handling
-
-- IPC handlers in `electron/ipc/*.ts` are not wrapped in try/catch (confirmed from code). Unhandled exceptions in handlers will reject the renderer-side Promise with a generic Electron IPC error.
-- `whatsapp.service.ts` and `applescript.ts` do catch errors internally and return structured error results rather than throwing.
-- No IPC input validation beyond TypeScript types — malformed inputs are not explicitly rejected in handlers.
+- **Confirmed from code**: all runtime contracts are Electron IPC channels, not HTTP endpoints.
+- **Not found in repository**: REST/GraphQL server, RPC gateway, ML inference API.
+
+## Confirmed from code
+
+### Contract type
+- Renderer calls `window.api` methods exposed by preload (`electron/preload.ts`).
+- Preload forwards to `ipcRenderer.invoke(...)` channels.
+- Main handles channels in `electron/ipc/*.ipc.ts`.
+
+### Schedule channels
+- `schedule:getAll() -> Schedule[]`
+- `schedule:get(id) -> Schedule | null`
+- `schedule:create(input) -> Schedule`
+- `schedule:update(id, patch) -> Schedule`
+- `schedule:delete(id) -> void`
+- `schedule:toggle(id, enabled) -> Schedule`
+- `schedule:testSend(id) -> runtime returns RunLog | null (see mismatch note)`
+- `schedule:getNextFireTimes() -> Record<string, string | null>`
+
+### Logs channels
+- `logs:getAll(limit?) -> RunLog[]`
+- `logs:bySchedule(scheduleId) -> RunLog[]`
+- `logs:clear(olderThanDays?) -> void`
+
+### Settings/system channels
+- `settings:getAll() -> AppSettings`
+- `settings:update(key, value) -> void`
+- `system:checkAccessibility() -> AccessibilityStatus`
+- `system:openAccessibilityPrefs() -> void`
+
+### Contacts channels
+- `contacts:search(query) -> Contact[]`
+- `contacts:checkAccess() -> AccessibilityStatus`
+- `contacts:openSettings() -> void`
+
+### Push event contract
+- Main emits `schedule:executed` event to renderer with run-log payload.
+- Hooks/context subscribe and refresh schedules/logs.
+
+### Error behavior
+- IPC handlers usually `throw` on failure; renderer promise rejects.
+- Contacts search explicitly throws permission message for denied access codes.
+- Send pipeline returns structured success/error object internally, but test-send path currently bypasses that shape at API boundary.
+
+### Loading/timeout expectations
+- Renderer sets local loading state before/after async IPC calls.
+- AppleScript helper has default command timeout (10s) and contacts search uses explicit timeout values.
+
+## Inferred / proposed
+- **Strongly inferred** there is no need for external API gateway unless product scope expands beyond local desktop automation.
+
+## Important details
+- This app has an internal API surface (IPC), so contract quality still matters like any backend API.
+- `shared/types.ts` is intended as contract source of truth but is currently inconsistent in one key method.
+
+## Open issues / gaps
+- **Confirmed from code** mismatch: `ElectronAPI.testSend` is typed as `Promise<SendResult>`, but backend returns `Promise<RunLog | null>` (`testSendSchedule -> executeJob`).
+- `settings:update` key/value shape is fully open (no enum validation in handler).
+- Error envelope is not standardized across channels.
+
+## Recommended next steps
+1. Align `testSend` return type and implementation contract.
+2. Add typed success/error envelopes for all channels.
+3. Restrict `settings:update` to allowed key set in handler.

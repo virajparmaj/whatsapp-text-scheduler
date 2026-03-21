@@ -24,14 +24,29 @@ export async function sendWhatsAppMessage(
 
   try {
     // Step 0: Check if WhatsApp is installed/running
-    const appName = settings.whatsappApp
+    const appName = settings.whatsappApp.replace(/['"\\]/g, '')
     try {
       const checkScript = `tell application "System Events" to (name of processes) contains "${appName}"`
       const running = await runAppleScript(checkScript)
       if (running.trim() === 'false') {
-        // Try to launch it and give it a moment to start
-        await runCommand('open', ['-a', appName])
-        await sleep(2000)
+        // Try to launch it
+        try {
+          await runCommand('open', ['-a', appName])
+        } catch {
+          return { success: false, error: `${appName} is not installed or could not be launched`, dryRun: isDryRun }
+        }
+        // Verify it launched (3 checks, 1s apart)
+        let launched = false
+        for (let i = 0; i < 3; i++) {
+          await sleep(1000)
+          try {
+            const recheck = await runAppleScript(checkScript)
+            if (recheck.trim() === 'true') { launched = true; break }
+          } catch { /* continue checking */ }
+        }
+        if (!launched) {
+          return { success: false, error: `${appName} failed to start after 3 seconds`, dryRun: isDryRun }
+        }
       }
     } catch {
       // If we can't check, proceed anyway — the URL scheme will attempt to launch it

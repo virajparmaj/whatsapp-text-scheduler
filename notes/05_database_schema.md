@@ -1,105 +1,88 @@
 # 05 — Database Schema
 
+## Purpose
+Document the implemented local database model and behavior used by the app.
+
 ## Status
+- **Confirmed from code**: SQLite schema and mappings in `electron/services/db.service.ts`.
+- **Strongly inferred**: `electron/db/schema.sql` is no longer canonical and is partially stale.
 
-Confirmed from code — `electron/db/schema.sql` and `electron/services/db.service.ts`.
+## Confirmed from code
 
-## Database
+### Engine and location
+- Engine: SQLite via `better-sqlite3`.
+- Open mode: WAL enabled and foreign keys enabled at init.
+- DB file path: `join(app.getPath('userData'), 'schedules.db')`.
 
-- Engine: SQLite (better-sqlite3)
-- Location: `~/Library/Application Support/whatsapp-text-scheduler/schedules.db`
-- Mode: WAL (Write-Ahead Logging), foreign keys ON
+### Table: `schedules`
+Columns implemented in runtime SCHEMA:
+- `id TEXT PRIMARY KEY`
+- `phone_number TEXT NOT NULL`
+- `contact_name TEXT NOT NULL DEFAULT ''`
+- `message TEXT NOT NULL`
+- `schedule_type TEXT NOT NULL`
+- `scheduled_at TEXT`
+- `time_of_day TEXT`
+- `day_of_week INTEGER`
+- `day_of_month INTEGER`
+- `month_of_year INTEGER`
+- `enabled INTEGER NOT NULL DEFAULT 1`
+- `dry_run INTEGER NOT NULL DEFAULT 0`
+- `created_at TEXT NOT NULL DEFAULT datetime('now','localtime')`
+- `updated_at TEXT NOT NULL DEFAULT datetime('now','localtime')`
 
-## Tables
+Usage notes:
+- One-time schedules use `scheduled_at`.
+- Daily/weekly/extended use `time_of_day`; weekly also uses `day_of_week`.
+- Quarterly/half-yearly/yearly use `day_of_month` and optional/required `month_of_year`.
 
-### `schedules`
+### Table: `run_logs`
+Columns implemented in runtime SCHEMA/migrations:
+- `id TEXT PRIMARY KEY`
+- `schedule_id TEXT NOT NULL REFERENCES schedules(id) ON DELETE CASCADE`
+- `status TEXT NOT NULL CHECK(status IN ('success','failed','dry_run','skipped'))`
+- `error_message TEXT`
+- `fired_at TEXT NOT NULL`
+- `completed_at TEXT`
+- `execution_duration INTEGER` (added by migration)
+- `scheduled_time TEXT` (added by migration)
 
-```sql
-CREATE TABLE IF NOT EXISTS schedules (
-  id             TEXT PRIMARY KEY,              -- nanoid (e.g. "V1StGXR8_Z5jdHi6B-myT")
-  phone_number   TEXT NOT NULL,                 -- E.164-style, e.g. "+15551234567"
-  contact_name   TEXT NOT NULL DEFAULT '',      -- display name, empty if manual entry
-  message        TEXT NOT NULL,                 -- plaintext message body
-  schedule_type  TEXT NOT NULL,                 -- 'one_time' | 'daily' | 'weekly'
-                                                -- | 'quarterly' | 'half_yearly' | 'yearly'
-  scheduled_at   TEXT,                          -- ISO 8601 datetime, used only for one_time
-  time_of_day    TEXT,                          -- "HH:mm" (24h), used for daily/weekly/extended
-  day_of_week    INTEGER,                       -- 0=Sun … 6=Sat, used for weekly
-  day_of_month   INTEGER,                       -- 1–28, used for quarterly/half_yearly/yearly
-  month_of_year  INTEGER,                       -- 0=Jan … 11=Dec, used for yearly
-  enabled        INTEGER NOT NULL DEFAULT 1,    -- 0 | 1 boolean
-  dry_run        INTEGER NOT NULL DEFAULT 0,    -- 0 | 1 boolean
-  created_at     TEXT NOT NULL,                 -- ISO 8601 datetime
-  updated_at     TEXT NOT NULL                  -- ISO 8601 datetime
-);
-```
+Indexes:
+- `idx_run_logs_schedule(schedule_id)`
+- `idx_run_logs_fired_at(fired_at DESC)`
 
-**Notes**:
-- `day_of_month` and `month_of_year` were added in a later migration. `db.service.ts` runs `ALTER TABLE` to add these columns on startup if missing (safe for existing DBs).
-- One-time schedules are auto-disabled (`enabled = 0`) after successful execution.
-- `dry_run` per-schedule is OR'd with the global `global_dry_run` setting at execution time.
+### Table: `settings`
+- `key TEXT PRIMARY KEY`
+- `value TEXT NOT NULL`
 
-### `run_logs`
+Seeded default keys:
+- `global_dry_run = '0'`
+- `default_country_code = '+1'`
+- `send_delay_ms = '3000'`
+- `whatsapp_app = 'WhatsApp'`
 
-```sql
-CREATE TABLE IF NOT EXISTS run_logs (
-  id             TEXT PRIMARY KEY,              -- nanoid
-  schedule_id    TEXT NOT NULL
-                   REFERENCES schedules(id) ON DELETE CASCADE,
-  status         TEXT NOT NULL,                 -- 'success' | 'failed' | 'dry_run' | 'skipped'
-  error_message  TEXT,                          -- null on success; error string on failure
-  fired_at       TEXT NOT NULL,                 -- ISO 8601 — when job was triggered
-  completed_at   TEXT NOT NULL                  -- ISO 8601 — when execution finished
-);
+### Relationships and ownership
+- `schedules (1) -> (many) run_logs` via `schedule_id`, cascade delete enabled.
+- No user/account ownership columns (single local-user model).
 
-CREATE INDEX IF NOT EXISTS idx_run_logs_schedule ON run_logs (schedule_id);
-CREATE INDEX IF NOT EXISTS idx_run_logs_fired_at ON run_logs (fired_at DESC);
-```
+### Migrations and retention
+- Startup `ALTER TABLE` attempts for: `day_of_month`, `month_of_year`, `execution_duration`, `scheduled_time`.
+- Startup log pruning: deletes run logs older than 90 days.
 
-**Notes**:
-- Cascade delete: all logs for a schedule are removed when the schedule is deleted.
-- `getLogs()` joins `schedules` to return `contact_name` and `message` alongside each log row.
-- `clearLogs()` accepts an optional `olderThanDays` integer; passing null clears all logs.
+## Inferred / proposed
+- **Strongly inferred** risk: duplicate schema definition (`db.service.ts` SCHEMA vs `electron/db/schema.sql`) can drift.
 
-### `settings`
+## Important details
+- App-level camelCase mapping is handled by `rowToSchedule` and `rowToRunLog`.
+- Settings values are stored as text and parsed into booleans/numbers at read time.
+- No encryption at rest for SQLite file is implemented.
 
-```sql
-CREATE TABLE IF NOT EXISTS settings (
-  key   TEXT PRIMARY KEY,
-  value TEXT NOT NULL
-);
+## Open issues / gaps
+- Runtime schema does not enforce `schedule_type` enum/check in SQL (validation is mostly application-level).
+- `settings:update` handler accepts arbitrary key/value updates.
+- No migration version table/history; migration is opportunistic `ALTER TABLE ... try/catch`.
 
--- Seed rows (inserted on first run):
-INSERT OR IGNORE INTO settings VALUES ('global_dry_run',      '0');
-INSERT OR IGNORE INTO settings VALUES ('default_country_code', '+1');
-INSERT OR IGNORE INTO settings VALUES ('send_delay_ms',        '3000');
-INSERT OR IGNORE INTO settings VALUES ('whatsapp_app',         'WhatsApp');
-```
-
-**Notes**:
-- All values stored as TEXT strings; parsing to boolean/number happens in `db.service.ts`.
-- `updateSetting()` uses `INSERT OR REPLACE` (upsert).
-- `whatsapp_app` is the exact application name used in `tell application "NAME" to activate` AppleScript.
-
-## Relationships
-
-```
-schedules (1) ─── (many) run_logs
-    id ────────────────── schedule_id (FK, CASCADE DELETE)
-```
-
-`settings` is standalone with no FK relationships.
-
-## Row-to-Object Mapping
-
-`db.service.ts` maps snake_case column names to camelCase TypeScript fields:
-- `phone_number` → `phoneNumber`
-- `contact_name` → `contactName`
-- `schedule_type` → `scheduleType`
-- `scheduled_at` → `scheduledAt`
-- `time_of_day` → `timeOfDay`
-- `day_of_week` → `dayOfWeek`
-- `day_of_month` → `dayOfMonth`
-- `month_of_year` → `monthOfYear`
-- `dry_run` → `dryRun` (INTEGER 0/1 → boolean)
-- `enabled` → `enabled` (INTEGER 0/1 → boolean)
+## Recommended next steps
+1. Make one schema source canonical (prefer runtime or generated migrations).
+2. Add explicit DB-level constraints for schedule type and recurrence field combinations.
+3. Add lightweight migration versioning to reduce drift risk.

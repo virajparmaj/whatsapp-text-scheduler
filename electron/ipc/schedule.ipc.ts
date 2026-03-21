@@ -69,7 +69,13 @@ export function registerScheduleHandlers(): void {
 
   ipcMain.handle('schedule:testSend', async (_, id: string) => {
     try {
-      return await testSendSchedule(id)
+      const log = await testSendSchedule(id)
+      if (!log) return { success: false, error: 'Schedule not found', dryRun: false }
+      return {
+        success: log.status === 'success',
+        error: log.errorMessage ?? undefined,
+        dryRun: log.status === 'dry_run'
+      }
     } catch (err) {
       console.error('[schedule:testSend]', err)
       throw err

@@ -1,43 +1,49 @@
 # 00 — Overview
 
 ## Purpose
+Document what this repository actually ships today: a local macOS desktop scheduler for WhatsApp messages.
 
-WhatsApp Text Scheduler is a local macOS desktop application that lets a user create and manage scheduled WhatsApp messages. It automates sending by combining the `whatsapp://` URL scheme (to pre-fill phone number and message text) with AppleScript + System Events (to press Enter at the right time).
+## Status
+- **Confirmed from code** for all core runtime behavior.
+- Current maturity: usable personal tool with real scheduling, persistence, logs, and settings.
 
-## Who It Is For
+## Confirmed from code
+- Product type: Electron desktop app (`electron/main.ts`) with React renderer (`src/App.tsx`).
+- Core capability: schedule WhatsApp messages and execute via `whatsapp://` URL + AppleScript Enter key automation (`electron/services/whatsapp.service.ts`).
+- Scheduling engine: in-process `node-schedule` jobs (`electron/services/scheduler.service.ts`).
+- Persistence: local SQLite via `better-sqlite3` (`electron/services/db.service.ts`).
+- Supported recurrence: `one_time`, `daily`, `weekly`, `quarterly`, `half_yearly`, `yearly` (`shared/types.ts`, `scheduler.service.ts`).
+- UI surface: tabbed app with Schedules, Calendar, Activity, Settings (`src/App.tsx`).
+- No cloud/backend HTTP service and no account system in runtime code.
 
-Single personal user on macOS. No cloud backend, no accounts, no multi-user support. Designed explicitly for personal productivity.
+## Inferred / proposed
+- **Strongly inferred** target user: single personal user on macOS who wants scheduled reminders/messages.
+- **Strongly inferred** positioning: local-first privacy tool, not enterprise messaging infrastructure.
 
-## Problem It Solves
+## Important details
+- One-time missed schedules are marked `skipped` at startup and auto-disabled (`initScheduler`).
+- One-time schedules auto-disable after execution attempt (success/failure/dry-run path completion).
+- Global dry run setting can force all sends into non-sending mode.
+- Main process emits `schedule:executed` and also shows native macOS notifications.
 
-WhatsApp Desktop has no native scheduling feature. This app fills that gap entirely on-device: no third-party services, no unofficial API, no data leaving the machine.
-
-## Core User Journey
-
-1. Open the app.
-2. Create a schedule: pick a contact (from macOS Contacts or enter manually), write a message, choose recurrence (one-time, daily, weekly, quarterly, half-yearly, yearly).
-3. Leave the app running in the background.
-4. At the scheduled time: app opens WhatsApp chat via URL scheme, waits for the configured delay, then presses Enter via AppleScript.
-5. Execution is logged in the Activity tab.
-
-## Current Implementation Maturity
-
-**Status: Confirmed from code — production-quality for personal use.**
-
-All core scheduling types, CRUD, logging, settings, contact search, and WhatsApp automation are implemented. The codebase is TypeScript-strict end-to-end, with a proper SQLite schema, in-process cron scheduler, and full IPC bridge between Electron main and React renderer.
-
-## Repo Reality
-
-| Aspect | Reality |
+## Repo reality
+| Area | Reality in this repo |
 |---|---|
-| Core scheduler | Fully implemented |
-| SQLite persistence | Fully implemented |
-| WhatsApp automation | Fully implemented (URL scheme + AppleScript) |
-| macOS Contacts integration | Fully implemented |
-| UI (Dashboard, Logs, Settings) | Fully implemented |
-| Authentication | Not applicable (local single-user app) |
-| Cloud backend | Not present, not needed |
-| Tests | Not found in repository |
-| Background daemon | Not implemented (app must stay running) |
-| Cross-platform support | macOS only (by design) |
-| Bulk / group messaging | Not implemented (stated limitation) |
+| Scheduling | Implemented and active in main process |
+| Message delivery | Implemented via local UI automation |
+| Logs/history | Implemented in SQLite + Activity tab |
+| Calendar visualization | Implemented |
+| Contacts lookup | Implemented via AppleScript to macOS Contacts |
+| Authentication | Not implemented and not needed for current local single-user model |
+| Cloud backend/API | Not found in repository |
+| Automated tests | Not found in repository |
+
+## Open issues / gaps
+- App must remain running for scheduled jobs to fire (no background daemon/service).
+- Automation depends on unlocked macOS session + granted Accessibility permissions.
+- No retry/backoff pipeline for failed sends.
+
+## Recommended next steps
+1. Keep this file aligned to runtime behavior in `electron/services/*` when scheduler/send behavior changes.
+2. Add tests for scheduler and DB layers before expanding features.
+3. Add background execution strategy if reliability becomes a product requirement.

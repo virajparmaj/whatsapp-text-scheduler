@@ -169,9 +169,25 @@ export function Settings() {
         <ul className="text-xs text-yellow-700 space-y-1 list-disc list-inside">
           <li>Your Mac must be unlocked for scheduled sends to work</li>
           <li>WhatsApp Desktop must be installed and logged in</li>
-          <li>The app must be running for schedules to fire</li>
+          <li>The app runs in the background when you close the window (check the tray icon)</li>
           <li>UI automation may fail if WhatsApp updates its interface</li>
         </ul>
+      </div>
+
+      {/* Start at Login */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-3">
+          <Switch
+            checked={settings.openAtLogin}
+            onCheckedChange={(v) => updateSetting('open_at_login', v ? '1' : '0')}
+          />
+          <div>
+            <Label>Start at Login</Label>
+            <p className="text-xs text-muted-foreground">
+              Launch WA Scheduler automatically when you log in (runs in background)
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Global Dry Run */}

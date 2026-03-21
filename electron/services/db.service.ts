@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3'
 import { app } from 'electron'
 import { join } from 'path'
+import { chmodSync } from 'fs'
 import { nanoid } from 'nanoid'
 import type {
   Schedule,
@@ -56,8 +57,19 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
   ('global_dry_run', '0'),
   ('default_country_code', '+1'),
   ('send_delay_ms', '3000'),
-  ('whatsapp_app', 'WhatsApp');
+  ('whatsapp_app', 'WhatsApp'),
+  ('open_at_login', '0'),
+  ('max_retries', '3');
 `
+
+const VALID_SETTINGS_KEYS = new Set([
+  'global_dry_run',
+  'default_country_code',
+  'send_delay_ms',
+  'whatsapp_app',
+  'open_at_login',
+  'max_retries'
+])
 
 // Map a DB row (snake_case) to a Schedule (camelCase)
 function rowToSchedule(row: Record<string, unknown>): Schedule {
@@ -74,6 +86,7 @@ function rowToSchedule(row: Record<string, unknown>): Schedule {
     monthOfYear: row.month_of_year as number | null,
     enabled: row.enabled === 1,
     dryRun: row.dry_run === 1,
+    lastFiredAt: (row.last_fired_at as string) || null,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string
   }
@@ -89,6 +102,8 @@ function rowToRunLog(row: Record<string, unknown>): RunLog {
     completedAt: row.completed_at as string | null,
     executionDuration: row.execution_duration as number | undefined,
     scheduledTime: row.scheduled_time as string | undefined,
+    retryAttempt: row.retry_attempt as number | undefined,
+    retryOf: row.retry_of as string | undefined,
     phoneNumber: row.phone_number as string | undefined,
     contactName: row.contact_name as string | undefined,
     messagePreview: row.message_preview as string | undefined
@@ -108,6 +123,12 @@ export function initDb(): void {
   try { db.exec('ALTER TABLE schedules ADD COLUMN month_of_year INTEGER') } catch {}
   try { db.exec('ALTER TABLE run_logs ADD COLUMN execution_duration INTEGER') } catch {}
   try { db.exec('ALTER TABLE run_logs ADD COLUMN scheduled_time TEXT') } catch {}
+  try { db.exec('ALTER TABLE schedules ADD COLUMN last_fired_at TEXT') } catch {}
+  try { db.exec('ALTER TABLE run_logs ADD COLUMN retry_attempt INTEGER DEFAULT 0') } catch {}
+  try { db.exec('ALTER TABLE run_logs ADD COLUMN retry_of TEXT') } catch {}
+
+  // Set DB file permissions to owner-only
+  try { chmodSync(dbPath, 0o600) } catch {}
 
   // Auto-prune logs older than 90 days on startup
   pruneOldLogs(90)
@@ -211,15 +232,17 @@ export function insertRunLog(
   status: RunStatus,
   errorMessage?: string,
   executionDurationMs?: number,
-  scheduledTime?: string
+  scheduledTime?: string,
+  retryAttempt?: number,
+  retryOf?: string
 ): RunLog {
   const id = nanoid()
   const firedAt = new Date().toISOString()
   const completedAt = new Date().toISOString()
   db.prepare(`
-    INSERT INTO run_logs (id, schedule_id, status, error_message, fired_at, completed_at, execution_duration, scheduled_time)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, scheduleId, status, errorMessage || null, firedAt, completedAt, executionDurationMs ?? null, scheduledTime || null)
+    INSERT INTO run_logs (id, schedule_id, status, error_message, fired_at, completed_at, execution_duration, scheduled_time, retry_attempt, retry_of)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, scheduleId, status, errorMessage || null, firedAt, completedAt, executionDurationMs ?? null, scheduledTime || null, retryAttempt ?? 0, retryOf || null)
 
   return {
     id,
@@ -229,8 +252,14 @@ export function insertRunLog(
     firedAt,
     completedAt,
     executionDuration: executionDurationMs,
-    scheduledTime: scheduledTime || undefined
+    scheduledTime: scheduledTime || undefined,
+    retryAttempt: retryAttempt ?? 0,
+    retryOf: retryOf || undefined
   }
+}
+
+export function updateLastFiredAt(scheduleId: string): void {
+  db.prepare('UPDATE schedules SET last_fired_at = ? WHERE id = ?').run(new Date().toISOString(), scheduleId)
 }
 
 export function getLogs(limit = 100): RunLog[] {
@@ -284,11 +313,16 @@ export function getSettings(): AppSettings {
     globalDryRun: map.global_dry_run === '1',
     defaultCountryCode: map.default_country_code || '+1',
     sendDelayMs: parseInt(map.send_delay_ms || '3000', 10),
-    whatsappApp: map.whatsapp_app || 'WhatsApp'
+    whatsappApp: map.whatsapp_app || 'WhatsApp',
+    openAtLogin: map.open_at_login === '1',
+    maxRetries: parseInt(map.max_retries || '3', 10)
   }
 }
 
 export function updateSetting(key: string, value: string): void {
+  if (!VALID_SETTINGS_KEYS.has(key)) {
+    throw new Error(`Invalid settings key: ${key}`)
+  }
   db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run(key, value)
 }
 

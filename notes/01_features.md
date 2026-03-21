@@ -1,99 +1,74 @@
 # 01 — Features
 
-## Confirmed Implemented
+## Purpose
+Inventory product features based on actual implementation, grouped by implementation status.
 
-### Schedule Management
-- Create schedules — `src/pages/Dashboard.tsx`, `src/components/ScheduleForm.tsx`, `electron/ipc/schedule.ipc.ts`
-- Edit schedules (modal with pre-filled form) — `src/pages/Dashboard.tsx`
-- Delete schedules — `src/pages/Dashboard.tsx`, `electron/ipc/schedule.ipc.ts`
-- Duplicate schedules — `src/pages/Dashboard.tsx` (copies all fields, generates new ID)
-- Enable / disable toggle per schedule — `electron/ipc/schedule.ipc.ts`, `db.service.ts`
+## Status
+- **Confirmed from code** for implemented groups below.
+- Includes explicit non-implemented items where user expectations may exist.
 
-### Schedule Types
-- One-time (exact datetime) — `electron/services/scheduler.service.ts`
-- Daily (time of day) — scheduler uses `RecurrenceRule`
-- Weekly (day of week + time) — scheduler uses `RecurrenceRule`
-- Quarterly (month slot + day-of-month + time) — e.g., Jan/Apr/Jul/Oct
-- Half-yearly (month slot + day-of-month + time) — e.g., Jan/Jul
-- Yearly (specific month + day-of-month + time)
-- Extended schedule configuration UI — `src/components/ExtendedScheduleDialog.tsx`
+## Confirmed implemented
 
-### WhatsApp Automation
-- URL scheme `whatsapp://send?phone=...&text=...` to open chat — `electron/services/whatsapp.service.ts`
-- AppleScript + System Events keystroke Enter to send — `electron/utils/applescript.ts`
-- Configurable send delay (default 3000 ms) — `electron/services/whatsapp.service.ts`
-- WhatsApp app name configurable (default 'WhatsApp') — settings
+### Scheduling and execution
+- Create, read, update, delete schedules via IPC + SQLite (`electron/ipc/schedule.ipc.ts`, `electron/services/db.service.ts`, `src/contexts/ScheduleContext.tsx`).
+- Toggle enable/disable per schedule and immediate rescheduling (`schedule:toggle`, `rescheduleJob`).
+- Run manual test-send using same execution path as scheduled runs (`schedule:testSend`, `executeJob`).
+- Recurrence types implemented: one-time, daily, weekly, quarterly, half-yearly, yearly (`shared/types.ts`, `scheduler.service.ts`, `ScheduleForm.tsx`).
+- One-time auto-disable after execution attempt and skip handling for missed one-time startup cases (`scheduler.service.ts`).
 
-### Dry-Run Mode
-- Per-schedule dry-run toggle — `shared/types.ts`, `ScheduleForm.tsx`
-- Global dry-run override (Settings page) — `electron/ipc/settings.ipc.ts`
-- Dry-run opens WhatsApp but does NOT press Enter — `whatsapp.service.ts`
-- Logged with status `dry_run`
+### Delivery + automation
+- WhatsApp URL-scheme open with prefilled phone/message (`sendWhatsAppMessage`).
+- Configurable send delay before Enter keystroke (`settings.send_delay_ms`).
+- Dry-run at schedule level plus global dry-run override (`dryRun` + `globalDryRun`).
+- Native notification for execution outcome (`electron/main.ts`, `Notification`).
 
-### Test Send
-- Manual execution via Play button in Dashboard — `electron/ipc/schedule.ipc.ts` (`schedule:testSend`)
-- Same execution path as scheduled send, toast result shown
+### Data + logs
+- Local SQLite persistence for schedules, run logs, settings (`db.service.ts`).
+- Run log statuses: `success`, `failed`, `dry_run`, `skipped` (`shared/types.ts`, DB check constraints).
+- Activity list filtering and clear logs action (`src/pages/Logs.tsx`, `logs:clear`).
+- Startup pruning of logs older than 90 days (`pruneOldLogs(90)`).
 
-### Contact Search
-- macOS Contacts app integration via AppleScript — `electron/ipc/contacts.ipc.ts`
-- Debounced search autocomplete (300 ms, 2+ chars) — `src/components/ScheduleForm.tsx`
-- Auto-fills phone number and contact name from selected contact
-- Sanitises query (strips quotes, backslashes)
-- Max 15 results in dropdown
+### UI and interaction
+- Tab shell with Schedules, Calendar, Activity, Settings (`src/App.tsx`).
+- Calendar visualization with recurrence expansion across visible range (`src/pages/Calendar.tsx`).
+- Contact search from macOS Contacts with result dropdown autofill (`contacts.ipc.ts`, `ScheduleForm.tsx`).
+- Toasts for create/update/delete/send feedback (`src/components/ui/toast.tsx`, Dashboard actions).
+- Shared schedule state + refresh on `schedule:executed` event (`ScheduleProvider`, preload event bridge).
 
-### Activity Logs
-- Execution log for every run (success, failed, dry_run, skipped) — `electron/services/db.service.ts`
-- Filter by status — `src/pages/Logs.tsx`
-- Real-time refresh via `schedule:executed` IPC event
-- Clear all logs or logs older than N days — `electron/ipc/logs.ipc.ts`
+## Partially implemented
+- Reliability for missed recurring runs while app is closed/sleeping is limited.
+  - **Confirmed from code**: one-time missed sends are marked skipped on startup.
+  - **Not found in repository**: recurring missed-run backfill/replay mechanism.
+- Calendar displays recurrence presence but not execution outcomes per day (no per-date success/failure overlay).
+- Contacts integration handles permission errors, but UX is form-level warning text only (no dedicated onboarding flow).
+- Settings writes arbitrary key/value (`settings:update` has no key whitelist enforcement in handler).
 
-### Settings
-- Global dry-run toggle — `electron/ipc/settings.ipc.ts`
-- Default country code — stored in SQLite `settings` table
-- Send delay (ms) — used in `whatsapp.service.ts`
-- WhatsApp app name — used in AppleScript activation
-- Accessibility permission check + deep link to System Settings
-- Contacts permission check + deep link to System Settings
+## Not implemented but implied
+- Background daemon/LaunchAgent to execute schedules while app UI is closed.
+- Retry and backoff policy for failed sends.
+- Conflict detection for overlapping schedules to same recipient/time.
+- Message template library.
+- Full automated test suite.
 
-### Persistence
-- SQLite at `~/Library/Application Support/whatsapp-text-scheduler/schedules.db`
-- WAL mode + foreign keys enabled — `electron/services/db.service.ts`
-- Schema migration on startup (adds new columns if missing)
+## Nice-to-have / future
+- Import/export schedules.
+- Rich calendar drill-down (execution history overlays).
+- Menu bar/tray mode.
+- Per-schedule timezone control.
+- Structured observability/diagnostics panel for automation failures.
 
-### App UX
-- Native macOS title bar (hiddenInset) with traffic lights at (15, 15)
-- Three-tab layout: Dashboard, Activity, Settings
-- Sidebar navigation with icons (lucide-react)
-- Status badges per schedule (Active, Paused, Dry Run, Done) — `src/components/StatusBadge.tsx`
-- Schedule label showing next-run description
+## Inferred / proposed
+- **Strongly inferred** product intent is “single-user local utility,” so some omitted SaaS features (multi-user auth, web backend) are deliberate.
 
-## Partially Implemented
+## Important details
+- Duplicate action currently copies fields and creates a new enabled schedule by default (no forced disable in code).
+- `schedule:executed` push updates schedules/logs without polling.
 
-### Schedule Status "Done" for One-Time
-- One-time schedules auto-disable after successful send — `electron/services/scheduler.service.ts`
-- UI shows "Done" badge for disabled one-time schedules — `src/pages/Dashboard.tsx`
-- **Gap**: Completed one-time schedules remain in the list permanently. No archive or auto-cleanup.
+## Open issues / gaps
+- Runtime contract mismatch: frontend `testSend` type expects `SendResult`, backend returns execution log object.
+- Reliability depends on macOS UI automation conditions (unlocked session, WhatsApp responsiveness).
 
-### Error Display in Logs
-- `error_message` column in `run_logs` stored and displayed — `src/pages/Logs.tsx`
-- **Gap**: Error messages are truncated in table column; no expand/detail view.
-
-## Not Implemented but Implied by Product
-
-- System notifications on message send or failure — no `Notification` API calls found
-- App stays in macOS Dock/menu bar when all windows closed — current code keeps app alive on macOS but there is no menu bar tray icon (`Tray` not used)
-- Retry logic for failed sends — not found
-- Schedule conflict / overlap detection — not found
-- Timezone support — all times stored and fired in local system time; no timezone field
-
-## Nice-to-Have / Future
-
-- Message templates (reusable saved messages)
-- Calendar view of upcoming scheduled messages
-- Export / import schedules (JSON backup)
-- macOS LaunchAgent for background-daemon mode (app does not need to stay open)
-- System tray / menu bar icon so app can be hidden from Dock
-- Bulk scheduling (multiple recipients from a list)
-- Group message support (requires WhatsApp Web API or similar — blocked by platform)
-- Retry with configurable back-off for failed sends
-- Test coverage (no test files present)
+## Recommended next steps
+1. Fix `testSend` contract mismatch first (type + IPC shape).
+2. Add retry/backoff and better missed-run handling.
+3. Add automated tests for scheduler, IPC, and DB mapping.

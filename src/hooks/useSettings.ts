@@ -6,7 +6,9 @@ const defaultSettings: AppSettings = {
   globalDryRun: false,
   defaultCountryCode: '+1',
   sendDelayMs: 3000,
-  whatsappApp: 'WhatsApp'
+  whatsappApp: 'WhatsApp',
+  openAtLogin: false,
+  maxRetries: 3
 }
 
 export function useSettings() {
