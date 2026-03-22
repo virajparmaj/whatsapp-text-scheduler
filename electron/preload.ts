@@ -22,6 +22,8 @@ const api: ElectronAPI = {
   checkAccessibility: () => ipcRenderer.invoke('system:checkAccessibility'),
   openAccessibilitySettings: () => ipcRenderer.invoke('system:openAccessibilityPrefs'),
 
+  rebuildApp: () => ipcRenderer.invoke('app:rebuild'),
+
   // macOS Contacts integration
   searchContacts: (query) => ipcRenderer.invoke('contacts:search', query),
   checkContactsAccess: () => ipcRenderer.invoke('contacts:checkAccess'),

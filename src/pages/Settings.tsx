@@ -7,7 +7,7 @@ import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import { api } from '@/lib/ipc'
 import { Select } from '@/components/ui/select'
-import { ShieldCheck, ShieldAlert, AlertTriangle, BookUser, Sun, Moon, Monitor } from 'lucide-react'
+import { ShieldCheck, ShieldAlert, AlertTriangle, BookUser, Sun, Moon, Monitor, RefreshCw } from 'lucide-react'
 import type { AccessibilityStatus } from '../../shared/types'
 
 /** Debounced text input that only persists after the user stops typing. */
@@ -46,6 +46,8 @@ export function Settings() {
   const [checkingAccess, setCheckingAccess] = useState(false)
   const [contacts, setContacts] = useState<AccessibilityStatus | null>(null)
   const [checkingContacts, setCheckingContacts] = useState(false)
+  const [buildStatus, setBuildStatus] = useState<'idle' | 'building' | 'error'>('idle')
+  const [buildError, setBuildError] = useState('')
 
   useEffect(() => {
     checkAccess()
@@ -88,7 +90,7 @@ export function Settings() {
       <div className="rounded-lg border p-4 space-y-3">
         <div className="flex items-center gap-2">
           {accessibility?.granted ? (
-            <ShieldCheck className="h-5 w-5 text-green-600" />
+            <ShieldCheck className="h-5 w-5 text-teal-700" />
           ) : (
             <ShieldAlert className="h-5 w-5 text-yellow-600" />
           )}
@@ -126,7 +128,7 @@ export function Settings() {
       <div className="rounded-lg border p-4 space-y-3">
         <div className="flex items-center gap-2">
           {contacts?.granted ? (
-            <BookUser className="h-5 w-5 text-green-600" />
+            <BookUser className="h-5 w-5 text-teal-700" />
           ) : (
             <BookUser className="h-5 w-5 text-yellow-600" />
           )}
@@ -295,6 +297,36 @@ export function Settings() {
           onSave={(v) => updateSetting('whatsapp_app', v)}
           className="w-48"
         />
+      </div>
+
+      {/* Developer */}
+      <div className="rounded-lg border p-4 space-y-3">
+        <h2 className="font-medium">Developer</h2>
+        <p className="text-sm text-muted-foreground">
+          Rebuild the app from source and restart. Use this after making code changes.
+        </p>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={buildStatus === 'building'}
+            onClick={async () => {
+              setBuildStatus('building')
+              setBuildError('')
+              const result = await api.rebuildApp()
+              if (!result.success) {
+                setBuildStatus('error')
+                setBuildError(result.error ?? 'Build failed')
+              }
+            }}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${buildStatus === 'building' ? 'animate-spin' : ''}`} />
+            {buildStatus === 'building' ? 'Building...' : 'Rebuild & Restart'}
+          </Button>
+        </div>
+        {buildStatus === 'error' && (
+          <p className="text-xs text-red-600 dark:text-red-400 font-mono">{buildError}</p>
+        )}
       </div>
     </div>
   )

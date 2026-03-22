@@ -120,6 +120,9 @@ export interface ElectronAPI {
   checkContactsAccess(): Promise<AccessibilityStatus>
   openContactsSettings(): Promise<void>
 
+  // Developer
+  rebuildApp(): Promise<{ success: boolean; error?: string }>
+
   // Events
   onScheduleExecuted(callback: (log: RunLog) => void): () => void
 }

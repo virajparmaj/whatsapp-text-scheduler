@@ -47,14 +47,14 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 }
 
 const variantStyles: Record<ToastVariant, string> = {
-  success: 'border-green-200 bg-green-50 text-green-800',
+  success: 'border-teal-200 bg-teal-50 text-teal-800',
   error: 'border-red-200 bg-red-50 text-red-800',
   info: 'border-blue-200 bg-blue-50 text-blue-800',
   default: 'border-border bg-card text-card-foreground'
 }
 
 const variantIcons: Record<ToastVariant, React.ReactNode> = {
-  success: <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />,
+  success: <CheckCircle2 className="h-4 w-4 text-teal-700 shrink-0" />,
   error: <XCircle className="h-4 w-4 text-red-600 shrink-0" />,
   info: <Info className="h-4 w-4 text-blue-600 shrink-0" />,
   default: null

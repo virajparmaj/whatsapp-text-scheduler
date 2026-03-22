@@ -360,7 +360,7 @@ export function ScheduleForm({ initial, defaultDate, onSubmit, onCancel }: Sched
                 setPhoneNumber(defaultCountryCode)
               }
             }}
-            className={cn(selectedContact && 'border-green-400/60')}
+            className={cn(selectedContact && 'border-teal-600/60')}
           />
           {errors.phoneNumber && <p className="text-xs text-destructive">{errors.phoneNumber}</p>}
         </div>
