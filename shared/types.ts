@@ -1,11 +1,14 @@
 // Schedule types
 export type ScheduleType = 'one_time' | 'daily' | 'weekly' | 'quarterly' | 'half_yearly' | 'yearly'
 export type RunStatus = 'success' | 'failed' | 'dry_run' | 'skipped'
+export type RecipientType = 'contact' | 'group'
 
 export interface Schedule {
   id: string
+  recipientType: RecipientType
   phoneNumber: string
   contactName: string
+  groupName: string
   message: string
   scheduleType: ScheduleType
   scheduledAt: string | null // ISO 8601 for one-time
@@ -21,8 +24,10 @@ export interface Schedule {
 }
 
 export interface CreateScheduleInput {
+  recipientType?: RecipientType
   phoneNumber: string
   contactName?: string
+  groupName?: string
   message: string
   scheduleType: ScheduleType
   scheduledAt?: string
@@ -47,8 +52,10 @@ export interface RunLog {
   retryAttempt?: number       // 0 = first try, 1+ = retries
   retryOf?: string            // original run_log.id if this is a retry
   // joined from schedule for display
+  recipientType?: RecipientType
   phoneNumber?: string
   contactName?: string
+  groupName?: string
   messagePreview?: string
 }
 
@@ -62,6 +69,7 @@ export interface AppSettings {
   openAtLogin: boolean
   maxRetries: number
   theme: ThemePreference
+  enableGroupScheduling: boolean
 }
 
 export interface SendResult {
@@ -94,7 +102,9 @@ export interface ElectronAPI {
   testSend(id: string): Promise<SendResult>
   getNextFireTimes(): Promise<Record<string, string | null>>
   checkConflicts(data: {
+    recipientType?: RecipientType
     phoneNumber: string
+    groupName?: string
     scheduleType: string
     scheduledAt?: string | null
     timeOfDay?: string | null

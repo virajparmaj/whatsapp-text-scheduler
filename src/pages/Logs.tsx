@@ -107,9 +107,14 @@ export function Logs() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="font-medium text-sm">
-                      {log.contactName || log.phoneNumber || log.scheduleId.slice(0, 8)}
+                      {log.recipientType === 'group'
+                        ? log.groupName
+                        : (log.contactName || log.phoneNumber || log.scheduleId.slice(0, 8))}
                     </span>
-                    {log.contactName && log.phoneNumber && (
+                    {log.recipientType === 'group' && (
+                      <span className="text-xs text-muted-foreground">Group</span>
+                    )}
+                    {log.recipientType !== 'group' && log.contactName && log.phoneNumber && (
                       <span className="text-xs text-muted-foreground">{log.phoneNumber}</span>
                     )}
                   </div>

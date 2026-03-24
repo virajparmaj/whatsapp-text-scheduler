@@ -113,7 +113,8 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
   ('whatsapp_app', 'WhatsApp'),
   ('open_at_login', '0'),
   ('max_retries', '3'),
-  ('theme', 'system');
+  ('theme', 'system'),
+  ('enable_group_scheduling', '0');
 `
 
 const VALID_SETTINGS_KEYS = new Set([
@@ -123,15 +124,18 @@ const VALID_SETTINGS_KEYS = new Set([
   'whatsapp_app',
   'open_at_login',
   'max_retries',
-  'theme'
+  'theme',
+  'enable_group_scheduling'
 ])
 
 // Map a DB row (snake_case) to a Schedule (camelCase)
 function rowToSchedule(row: Record<string, unknown>): Schedule {
   return {
     id: row.id as string,
+    recipientType: (row.recipient_type as string as Schedule['recipientType']) || 'contact',
     phoneNumber: row.phone_number as string,
     contactName: row.contact_name as string,
+    groupName: (row.group_name as string) || '',
     message: row.message as string,
     scheduleType: row.schedule_type as Schedule['scheduleType'],
     scheduledAt: row.scheduled_at as string | null,
@@ -159,8 +163,10 @@ function rowToRunLog(row: Record<string, unknown>): RunLog {
     scheduledTime: row.scheduled_time as string | undefined,
     retryAttempt: row.retry_attempt as number | undefined,
     retryOf: row.retry_of as string | undefined,
+    recipientType: (row.recipient_type as RunLog['recipientType']) || undefined,
     phoneNumber: row.phone_number as string | undefined,
     contactName: row.contact_name as string | undefined,
+    groupName: (row.group_name as string) || undefined,
     messagePreview: row.message_preview as string | undefined
   }
 }
@@ -190,6 +196,8 @@ export function initDb(): void {
   try { db.exec('ALTER TABLE schedules ADD COLUMN last_fired_at TEXT') } catch {}
   try { db.exec('ALTER TABLE run_logs ADD COLUMN retry_attempt INTEGER DEFAULT 0') } catch {}
   try { db.exec('ALTER TABLE run_logs ADD COLUMN retry_of TEXT') } catch {}
+  try { db.exec("ALTER TABLE schedules ADD COLUMN recipient_type TEXT NOT NULL DEFAULT 'contact'") } catch {}
+  try { db.exec("ALTER TABLE schedules ADD COLUMN group_name TEXT NOT NULL DEFAULT ''") } catch {}
 
   // Set DB file permissions to owner-only
   try { chmodSync(dbPath, 0o600) } catch {}
@@ -223,12 +231,14 @@ export function createSchedule(input: CreateScheduleInput): Schedule {
   const id = nanoid()
   const now = new Date().toISOString()
   db.prepare(`
-    INSERT INTO schedules (id, phone_number, contact_name, message, schedule_type, scheduled_at, time_of_day, day_of_week, day_of_month, month_of_year, dry_run, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO schedules (id, recipient_type, phone_number, contact_name, group_name, message, schedule_type, scheduled_at, time_of_day, day_of_week, day_of_month, month_of_year, dry_run, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
+    input.recipientType || 'contact',
     input.phoneNumber,
     input.contactName || '',
+    input.groupName || '',
     input.message,
     input.scheduleType,
     input.scheduledAt || null,
@@ -250,8 +260,10 @@ export function updateSchedule(id: string, input: UpdateScheduleInput): Schedule
   const now = new Date().toISOString()
   db.prepare(`
     UPDATE schedules SET
+      recipient_type = ?,
       phone_number = ?,
       contact_name = ?,
+      group_name = ?,
       message = ?,
       schedule_type = ?,
       scheduled_at = ?,
@@ -264,8 +276,10 @@ export function updateSchedule(id: string, input: UpdateScheduleInput): Schedule
       updated_at = ?
     WHERE id = ?
   `).run(
+    input.recipientType ?? existing.recipientType,
     input.phoneNumber ?? existing.phoneNumber,
     input.contactName ?? existing.contactName,
+    input.groupName ?? existing.groupName,
     input.message ?? existing.message,
     input.scheduleType ?? existing.scheduleType,
     input.scheduledAt !== undefined ? input.scheduledAt || null : existing.scheduledAt,
@@ -299,14 +313,24 @@ export function findConflicts(
   scheduledAt: string | null,
   timeOfDay: string | null,
   dayOfWeek: number | null,
-  excludeId?: string
+  excludeId?: string,
+  recipientType?: string,
+  groupName?: string
 ): Schedule[] {
-  const phone = phoneNumber.replace(/[\s\-()]/g, '')
+  let rows: Record<string, unknown>[]
 
-  // Find schedules with same phone number (normalized)
-  const rows = db.prepare(
-    `SELECT * FROM schedules WHERE REPLACE(REPLACE(REPLACE(REPLACE(phone_number, ' ', ''), '-', ''), '(', ''), ')', '') = ? AND enabled = 1`
-  ).all(phone) as Record<string, unknown>[]
+  if (recipientType === 'group' && groupName) {
+    // Group schedules: match on exact group name
+    rows = db.prepare(
+      `SELECT * FROM schedules WHERE recipient_type = 'group' AND group_name = ? AND enabled = 1`
+    ).all(groupName) as Record<string, unknown>[]
+  } else {
+    // Contact schedules: match on normalized phone number (existing logic)
+    const phone = phoneNumber.replace(/[\s\-()]/g, '')
+    rows = db.prepare(
+      `SELECT * FROM schedules WHERE recipient_type != 'group' AND REPLACE(REPLACE(REPLACE(REPLACE(phone_number, ' ', ''), '-', ''), '(', ''), ')', '') = ? AND enabled = 1`
+    ).all(phone) as Record<string, unknown>[]
+  }
 
   const candidates = rows.map(rowToSchedule).filter((s) => s.id !== excludeId)
 
@@ -373,7 +397,7 @@ export function updateLastFiredAt(scheduleId: string): void {
 export function getLogs(limit = 100): RunLog[] {
   const rows = db
     .prepare(
-      `SELECT l.*, s.phone_number, s.contact_name, substr(s.message, 1, 80) as message_preview
+      `SELECT l.*, s.recipient_type, s.phone_number, s.contact_name, s.group_name, substr(s.message, 1, 80) as message_preview
        FROM run_logs l
        LEFT JOIN schedules s ON l.schedule_id = s.id
        ORDER BY l.fired_at DESC
@@ -386,7 +410,7 @@ export function getLogs(limit = 100): RunLog[] {
 export function getLogsBySchedule(scheduleId: string): RunLog[] {
   const rows = db
     .prepare(
-      `SELECT l.*, s.phone_number, s.contact_name, substr(s.message, 1, 80) as message_preview
+      `SELECT l.*, s.recipient_type, s.phone_number, s.contact_name, s.group_name, substr(s.message, 1, 80) as message_preview
        FROM run_logs l
        LEFT JOIN schedules s ON l.schedule_id = s.id
        WHERE l.schedule_id = ?
@@ -424,7 +448,8 @@ export function getSettings(): AppSettings {
     whatsappApp: map.whatsapp_app || 'WhatsApp',
     openAtLogin: map.open_at_login === '1',
     maxRetries: parseInt(map.max_retries || '3', 10),
-    theme: (map.theme as 'system' | 'light' | 'dark') || 'system'
+    theme: (map.theme as 'system' | 'light' | 'dark') || 'system',
+    enableGroupScheduling: map.enable_group_scheduling === '1'
   }
 }
 

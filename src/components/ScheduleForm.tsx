@@ -6,10 +6,12 @@ import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { api } from '@/lib/ipc'
-import { Search, User, X, CalendarDays, AlertTriangle } from 'lucide-react'
+import { Search, User, Users, X, CalendarDays, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ExtendedScheduleDialog } from '@/components/ExtendedScheduleDialog'
-import type { Schedule, CreateScheduleInput, ScheduleType, Contact } from '../../shared/types'
+import { DateTimePicker } from '@/components/ui/date-time-picker'
+import { TimePicker } from '@/components/ui/time-picker'
+import type { Schedule, CreateScheduleInput, ScheduleType, RecipientType, Contact } from '../../shared/types'
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 const MONTHS = [
@@ -69,15 +71,19 @@ export function ScheduleForm({ initial, defaultDate, onSubmit, onCancel }: Sched
     return ''
   }
 
-  // Pre-fill country code for new schedules
+  // Pre-fill country code and check group scheduling setting
   const [defaultCountryCode, setDefaultCountryCode] = useState('')
+  const [groupEnabled, setGroupEnabled] = useState(false)
   useEffect(() => {
-    if (!initial) {
-      api.getSettings().then((s) => {
-        if (s.defaultCountryCode) setDefaultCountryCode(s.defaultCountryCode)
-      }).catch(() => {})
-    }
+    api.getSettings().then((s) => {
+      if (!initial && s.defaultCountryCode) setDefaultCountryCode(s.defaultCountryCode)
+      setGroupEnabled(s.enableGroupScheduling)
+    }).catch(() => {})
   }, [initial])
+
+  // Recipient type state
+  const [recipientType, setRecipientType] = useState<RecipientType>(initial?.recipientType || 'contact')
+  const [groupName, setGroupName] = useState(initial?.groupName || '')
 
   const [phoneNumber, setPhoneNumber] = useState(initial?.phoneNumber || '')
   const [contactName, setContactName] = useState(initial?.contactName || '')
@@ -177,9 +183,15 @@ export function ScheduleForm({ initial, defaultDate, onSubmit, onCancel }: Sched
 
   function validate(): boolean {
     const errs: Record<string, string> = {}
-    const cleanPhone = phoneNumber.replace(/[^\d+]/g, '')
-    if (!cleanPhone || cleanPhone.replace(/\+/g, '').length < 7) {
-      errs.phoneNumber = 'Enter a valid phone number (with country code)'
+    if (recipientType === 'group') {
+      if (!groupName.trim()) {
+        errs.groupName = 'Group name is required'
+      }
+    } else {
+      const cleanPhone = phoneNumber.replace(/[^\d+]/g, '')
+      if (!cleanPhone || cleanPhone.replace(/\+/g, '').length < 7) {
+        errs.phoneNumber = 'Enter a valid phone number (with country code)'
+      }
     }
     if (!message.trim()) {
       errs.message = 'Message cannot be empty'
@@ -208,7 +220,9 @@ export function ScheduleForm({ initial, defaultDate, onSubmit, onCancel }: Sched
     if (!conflictDismissedRef.current) {
       try {
         const found = await api.checkConflicts({
-          phoneNumber: phoneNumber.replace(/[^\d+]/g, ''),
+          recipientType,
+          phoneNumber: recipientType === 'contact' ? phoneNumber.replace(/[^\d+]/g, '') : '',
+          groupName: recipientType === 'group' ? groupName.trim() : undefined,
           scheduleType,
           scheduledAt: scheduleType === 'one_time' ? new Date(scheduledAt).toISOString() : null,
           timeOfDay: scheduleType !== 'one_time' ? timeOfDay : null,
@@ -227,8 +241,10 @@ export function ScheduleForm({ initial, defaultDate, onSubmit, onCancel }: Sched
     setSubmitting(true)
     try {
       const data: CreateScheduleInput = {
-        phoneNumber: phoneNumber.replace(/[^\d+]/g, ''),
-        contactName: contactName.trim(),
+        recipientType,
+        phoneNumber: recipientType === 'contact' ? phoneNumber.replace(/[^\d+]/g, '') : '',
+        contactName: recipientType === 'contact' ? contactName.trim() : undefined,
+        groupName: recipientType === 'group' ? groupName.trim() : undefined,
         message: message.trim(),
         scheduleType,
         dryRun
@@ -263,123 +279,185 @@ export function ScheduleForm({ initial, defaultDate, onSubmit, onCancel }: Sched
     <>
       <form onSubmit={handleSubmit} className="space-y-4">
 
-        {/* ── Recipient ─────────────────────────────────────── */}
-        <div className="space-y-2">
-          <Label>Recipient</Label>
+        {/* ── Recipient Type Selector (only when group scheduling enabled) ── */}
+        {groupEnabled && (
+          <div className="space-y-2">
+            <Label>Send To</Label>
+            <div className="flex rounded-lg border overflow-hidden">
+              <button
+                type="button"
+                onClick={() => {
+                  setRecipientType('contact')
+                }}
+                className={cn(
+                  'flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium transition-colors',
+                  recipientType === 'contact'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-background hover:bg-accent'
+                )}
+              >
+                <User className="h-4 w-4" />
+                Contact
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setRecipientType('group')
+                  // Default group schedules to dry-run for safety
+                  if (!dryRun) setDryRun(true)
+                }}
+                className={cn(
+                  'flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium transition-colors',
+                  recipientType === 'group'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-background hover:bg-accent'
+                )}
+              >
+                <Users className="h-4 w-4" />
+                Group
+              </button>
+            </div>
+          </div>
+        )}
 
-          {/* Contact search input */}
-          <div className="relative">
+        {/* ── Group Name (group mode) ──────────────────────── */}
+        {recipientType === 'group' && (
+          <div className="space-y-2">
+            <Label htmlFor="groupName">Group Name</Label>
+            <Input
+              id="groupName"
+              placeholder="Exact WhatsApp group name"
+              value={groupName}
+              onChange={(e) => setGroupName(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Must match the group name exactly as it appears in WhatsApp
+            </p>
+            {errors.groupName && <p className="text-xs text-destructive">{errors.groupName}</p>}
+          </div>
+        )}
+
+        {/* ── Recipient (contact mode) ─────────────────────── */}
+        {recipientType === 'contact' && (
+          <div className="space-y-2">
+            <Label>Recipient</Label>
+
+            {/* Contact search input */}
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-              <Input
-                placeholder="Search by name (2+ chars)…"
-                value={contactQuery}
-                onChange={(e) => handleContactSearch(e.target.value)}
-                onFocus={() => contactResults.length > 0 && setShowDropdown(true)}
-                onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
-                className="pl-9"
-                autoComplete="off"
-              />
-              {contactLoading && (
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                  Searching…
-                </span>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                <Input
+                  placeholder="Search by name (2+ chars)…"
+                  value={contactQuery}
+                  onChange={(e) => handleContactSearch(e.target.value)}
+                  onFocus={() => contactResults.length > 0 && setShowDropdown(true)}
+                  onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
+                  className="pl-9"
+                  autoComplete="off"
+                />
+                {contactLoading && (
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                    Searching…
+                  </span>
+                )}
+              </div>
+
+              {/* Results dropdown */}
+              {showDropdown && contactResults.length > 0 && (
+                <div className="absolute z-50 w-full mt-1 rounded-md border bg-background shadow-lg max-h-52 overflow-y-auto">
+                  {contactResults.map((contact, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onMouseDown={() => selectContact(contact)}
+                      className="w-full flex items-center gap-3 px-3 py-2 hover:bg-accent text-left"
+                    >
+                      <User className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <div className="min-w-0">
+                        <span className="text-sm font-medium block truncate">{contact.name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {contact.phoneNumber} · {contact.phoneLabel}
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
               )}
             </div>
 
-            {/* Results dropdown */}
-            {showDropdown && contactResults.length > 0 && (
-              <div className="absolute z-50 w-full mt-1 rounded-md border bg-background shadow-lg max-h-52 overflow-y-auto">
-                {contactResults.map((contact, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    onMouseDown={() => selectContact(contact)} // mouseDown fires before onBlur
-                    className="w-full flex items-center gap-3 px-3 py-2 hover:bg-accent text-left"
-                  >
-                    <User className="h-4 w-4 text-muted-foreground shrink-0" />
-                    <div className="min-w-0">
-                      <span className="text-sm font-medium block truncate">{contact.name}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {contact.phoneNumber} · {contact.phoneLabel}
-                      </span>
-                    </div>
-                  </button>
-                ))}
+            {/* Permission / search error */}
+            {contactError && (
+              <p className="text-xs text-yellow-600">
+                {contactError}
+              </p>
+            )}
+
+            {/* Selected contact pill */}
+            {selectedContact && (
+              <div className="flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2">
+                <User className="h-4 w-4 text-muted-foreground shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm font-medium truncate block">{selectedContact.name}</span>
+                  <span className="text-xs text-muted-foreground">{selectedContact.phoneNumber}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={clearContact}
+                  className="shrink-0 text-muted-foreground hover:text-foreground"
+                  title="Clear contact"
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </div>
             )}
           </div>
+        )}
 
-          {/* Permission / search error */}
-          {contactError && (
-            <p className="text-xs text-yellow-600">
-              ⚠ {contactError}
-            </p>
-          )}
+        {/* ── Phone Number (contact mode) ─────────────────── */}
+        {recipientType === 'contact' && (
+          <div className="space-y-2">
+            <Label htmlFor="phone">
+              Phone Number
+              {selectedContact && (
+                <span className="ml-2 text-xs text-muted-foreground font-normal">(auto-filled)</span>
+              )}
+            </Label>
+            <Input
+              id="phone"
+              placeholder={defaultCountryCode ? `${defaultCountryCode}1234567890` : '+1234567890'}
+              value={phoneNumber}
+              onChange={(e) => {
+                setPhoneNumber(e.target.value)
+                if (selectedContact) setSelectedContact(null)
+              }}
+              onFocus={() => {
+                if (!phoneNumber && defaultCountryCode && !initial) {
+                  setPhoneNumber(defaultCountryCode)
+                }
+              }}
+              className={cn(selectedContact && 'border-teal-600/60')}
+            />
+            {errors.phoneNumber && <p className="text-xs text-destructive">{errors.phoneNumber}</p>}
+          </div>
+        )}
 
-          {/* Selected contact pill */}
-          {selectedContact && (
-            <div className="flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2">
-              <User className="h-4 w-4 text-muted-foreground shrink-0" />
-              <div className="flex-1 min-w-0">
-                <span className="text-sm font-medium truncate block">{selectedContact.name}</span>
-                <span className="text-xs text-muted-foreground">{selectedContact.phoneNumber}</span>
-              </div>
-              <button
-                type="button"
-                onClick={clearContact}
-                className="shrink-0 text-muted-foreground hover:text-foreground"
-                title="Clear contact"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* ── Phone Number ───────────────────────────────────── */}
-        <div className="space-y-2">
-          <Label htmlFor="phone">
-            Phone Number
-            {selectedContact && (
-              <span className="ml-2 text-xs text-muted-foreground font-normal">(auto-filled)</span>
-            )}
-          </Label>
-          <Input
-            id="phone"
-            placeholder={defaultCountryCode ? `${defaultCountryCode}1234567890` : '+1234567890'}
-            value={phoneNumber}
-            onChange={(e) => {
-              setPhoneNumber(e.target.value)
-              // If user edits manually, clear the contact link
-              if (selectedContact) setSelectedContact(null)
-            }}
-            onFocus={() => {
-              // Auto-fill country code on first focus if phone is empty
-              if (!phoneNumber && defaultCountryCode && !initial) {
-                setPhoneNumber(defaultCountryCode)
-              }
-            }}
-            className={cn(selectedContact && 'border-teal-600/60')}
-          />
-          {errors.phoneNumber && <p className="text-xs text-destructive">{errors.phoneNumber}</p>}
-        </div>
-
-        {/* ── Contact Name ───────────────────────────────────── */}
-        <div className="space-y-2">
-          <Label htmlFor="contact">
-            Contact Name (optional)
-            {selectedContact && (
-              <span className="ml-2 text-xs text-muted-foreground font-normal">(auto-filled)</span>
-            )}
-          </Label>
-          <Input
-            id="contact"
-            placeholder="John Doe"
-            value={contactName}
-            onChange={(e) => setContactName(e.target.value)}
-          />
-        </div>
+        {/* ── Contact Name (contact mode) ─────────────────── */}
+        {recipientType === 'contact' && (
+          <div className="space-y-2">
+            <Label htmlFor="contact">
+              Contact Name (optional)
+              {selectedContact && (
+                <span className="ml-2 text-xs text-muted-foreground font-normal">(auto-filled)</span>
+              )}
+            </Label>
+            <Input
+              id="contact"
+              placeholder="John Doe"
+              value={contactName}
+              onChange={(e) => setContactName(e.target.value)}
+            />
+          </div>
+        )}
 
         {/* ── Message ────────────────────────────────────────── */}
         <div className="space-y-2">
@@ -422,12 +500,10 @@ export function ScheduleForm({ initial, defaultDate, onSubmit, onCancel }: Sched
 
         {scheduleType === 'one_time' && (
           <div className="space-y-2">
-            <Label htmlFor="datetime">Date & Time</Label>
-            <Input
-              id="datetime"
-              type="datetime-local"
+            <Label>Date & Time</Label>
+            <DateTimePicker
               value={scheduledAt}
-              onChange={(e) => setScheduledAt(e.target.value)}
+              onChange={(v) => setScheduledAt(v)}
             />
             {errors.scheduledAt && <p className="text-xs text-destructive">{errors.scheduledAt}</p>}
           </div>
@@ -435,12 +511,10 @@ export function ScheduleForm({ initial, defaultDate, onSubmit, onCancel }: Sched
 
         {(scheduleType === 'daily' || scheduleType === 'weekly') && (
           <div className="space-y-2">
-            <Label htmlFor="time">Time</Label>
-            <Input
-              id="time"
-              type="time"
+            <Label>Time</Label>
+            <TimePicker
               value={timeOfDay}
-              onChange={(e) => setTimeOfDay(e.target.value)}
+              onChange={(v) => setTimeOfDay(v)}
             />
           </div>
         )}

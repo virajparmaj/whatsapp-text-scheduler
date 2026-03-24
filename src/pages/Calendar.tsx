@@ -328,7 +328,7 @@ export function CalendarPage() {
                       <div className="flex items-center gap-2">
                         <div className={`w-2 h-2 rounded-full shrink-0 ${STATUS_DOT_COLORS[getScheduleStatus(s)]}`} />
                         <span className="text-sm font-medium truncate">
-                          {s.contactName || s.phoneNumber}
+                          {s.recipientType === 'group' ? s.groupName : (s.contactName || s.phoneNumber)}
                         </span>
                       </div>
                       <p className="text-xs text-muted-foreground truncate mt-0.5 pl-4">

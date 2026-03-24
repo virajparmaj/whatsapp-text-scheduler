@@ -4,8 +4,8 @@
 Provide a practical, repo-specific plan of improvements aligned with current architecture.
 
 ## Status
-- Last updated: 2026-03-21
-- Items below are **proposed next steps** after the recent reliability hardening pass.
+- Last updated: 2026-03-23
+- Items below are **proposed next steps** after the recent UX pass.
 
 ## Recently completed (current branch/code state)
 1. `testSend` IPC contract aligned to `SendResult`.
@@ -14,10 +14,19 @@ Provide a practical, repo-specific plan of improvements aligned with current arc
 4. Settings key whitelist enforcement added.
 5. Tray runtime, start-at-login sync, single-instance lock, and structured logging added.
 6. Baseline automated tests added (scheduler logic, IPC contract/validation, type mapping).
+7. App rebranded to WhatTime; DB auto-migrated from legacy app-name paths.
+8. `max_retries` control exposed in Settings UI (bounds-clamped 1–10).
+9. Theme picker added to Settings (system/light/dark).
+10. Dashboard search + sort controls added.
+11. Cmd+N keyboard shortcut for new schedule.
+12. Conflict detection on create/edit (`schedule:checkConflicts`).
+13. Group scheduling support (`RecipientType`, `enableGroupScheduling` setting).
+14. `ExtendedScheduleDialog` for quarterly/half-yearly/yearly time config.
+15. Developer “Rebuild App” button in Settings.
 
 ## Next priority (high impact)
 1. Add first-run onboarding checklist (Accessibility, Contacts, WhatsApp readiness, reliability notes).
-2. Expose retry policy in Settings (`max_retries` control + safe value bounds).
+2. Complete dark theme token set (Tailwind dark overrides across all components).
 3. Add diagnostics panel (“why didn’t it send?” with last run details and actionable fixes).
 
 ## Better UI (focused improvements)

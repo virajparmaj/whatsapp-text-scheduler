@@ -6,8 +6,45 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+/** Escape a string for safe embedding in AppleScript double-quoted literals. */
+function escapeForAppleScript(str: string): string {
+  return str.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+}
+
 /**
- * Send a WhatsApp message via macOS automation.
+ * Ensure WhatsApp Desktop is running. Launches it if not.
+ * Returns a SendResult error if it cannot be started, or null on success.
+ */
+async function ensureWhatsAppRunning(appName: string, isDryRun: boolean): Promise<SendResult | null> {
+  try {
+    const checkScript = `tell application "System Events" to (name of processes) contains "${appName}"`
+    const running = await runAppleScript(checkScript)
+    if (running.trim() === 'false') {
+      try {
+        await runCommand('open', ['-a', appName])
+      } catch {
+        return { success: false, error: `${appName} is not installed or could not be launched`, dryRun: isDryRun }
+      }
+      let launched = false
+      for (let i = 0; i < 3; i++) {
+        await sleep(1000)
+        try {
+          const recheck = await runAppleScript(checkScript)
+          if (recheck.trim() === 'true') { launched = true; break }
+        } catch { /* continue checking */ }
+      }
+      if (!launched) {
+        return { success: false, error: `${appName} failed to start after 3 seconds`, dryRun: isDryRun }
+      }
+    }
+  } catch {
+    // If we can't check, proceed anyway
+  }
+  return null
+}
+
+/**
+ * Send a WhatsApp message to a contact via macOS automation.
  *
  * Flow:
  * 1. Open WhatsApp chat using the whatsapp:// URL scheme (pre-fills message)
@@ -21,56 +58,126 @@ export async function sendWhatsAppMessage(
 ): Promise<SendResult> {
   const settings = getSettings()
   const isDryRun = dryRun || settings.globalDryRun
+  const appName = settings.whatsappApp.replace(/['"\\;\n\r]/g, '')
 
   try {
-    // Step 0: Check if WhatsApp is installed/running
-    const appName = settings.whatsappApp.replace(/['"\\;\n\r]/g, '')
-    try {
-      const checkScript = `tell application "System Events" to (name of processes) contains "${appName}"`
-      const running = await runAppleScript(checkScript)
-      if (running.trim() === 'false') {
-        // Try to launch it
-        try {
-          await runCommand('open', ['-a', appName])
-        } catch {
-          return { success: false, error: `${appName} is not installed or could not be launched`, dryRun: isDryRun }
-        }
-        // Verify it launched (3 checks, 1s apart)
-        let launched = false
-        for (let i = 0; i < 3; i++) {
-          await sleep(1000)
-          try {
-            const recheck = await runAppleScript(checkScript)
-            if (recheck.trim() === 'true') { launched = true; break }
-          } catch { /* continue checking */ }
-        }
-        if (!launched) {
-          return { success: false, error: `${appName} failed to start after 3 seconds`, dryRun: isDryRun }
-        }
-      }
-    } catch {
-      // If we can't check, proceed anyway — the URL scheme will attempt to launch it
-    }
+    const launchErr = await ensureWhatsAppRunning(appName, isDryRun)
+    if (launchErr) return launchErr
 
-    // Step 1: Build the whatsapp:// URL and open it
-    // Strip any non-digit chars except leading +
+    // Build the whatsapp:// URL and open it
     const cleanNumber = phoneNumber.replace(/[^\d+]/g, '')
     const encodedMessage = encodeURIComponent(message)
     const url = `whatsapp://send?phone=${cleanNumber}&text=${encodedMessage}`
 
     await runCommand('open', [url])
-
-    // Step 2: Wait for WhatsApp to load the chat
     await sleep(settings.sendDelayMs)
 
     if (isDryRun) {
       return { success: true, dryRun: true }
     }
 
-    // Step 3: Activate WhatsApp and press Enter to send
+    // Activate WhatsApp and press Enter to send
     const sendScript = `
       tell application "${appName}" to activate
       delay 0.5
+      tell application "System Events"
+        tell process "${appName}"
+          keystroke return
+        end tell
+      end tell
+    `
+    await runAppleScript(sendScript)
+
+    return { success: true, dryRun: false }
+  } catch (error) {
+    const errMsg = error instanceof Error ? error.message : String(error)
+    return { success: false, error: errMsg, dryRun: isDryRun }
+  }
+}
+
+/**
+ * Send a WhatsApp message to a group via macOS UI automation.
+ *
+ * Flow:
+ * 1. Ensure WhatsApp is running
+ * 2. Activate WhatsApp and open search bar (Cmd+F)
+ * 3. Type exact group name to search
+ * 4. Wait for results, then Arrow Down x2 + Enter to select first result
+ * 5. Paste the message via clipboard (handles special chars / long text)
+ * 6. Press Enter to send (skipped in dry-run)
+ *
+ * This is best-effort automation — less reliable than contact deep links.
+ */
+export async function sendWhatsAppGroupMessage(
+  groupName: string,
+  message: string,
+  dryRun: boolean
+): Promise<SendResult> {
+  const settings = getSettings()
+  const isDryRun = dryRun || settings.globalDryRun
+  const appName = settings.whatsappApp.replace(/['"\\;\n\r]/g, '')
+  const escapedGroupName = escapeForAppleScript(groupName)
+  const escapedMessage = escapeForAppleScript(message)
+
+  try {
+    const launchErr = await ensureWhatsAppRunning(appName, isDryRun)
+    if (launchErr) return launchErr
+
+    // Activate WhatsApp and open search bar with Cmd+F
+    const searchScript = `
+      tell application "${appName}" to activate
+      delay 0.5
+      tell application "System Events"
+        tell process "${appName}"
+          keystroke "f" using command down
+          delay 0.5
+          keystroke "${escapedGroupName}"
+        end tell
+      end tell
+    `
+    await runAppleScript(searchScript)
+
+    // Wait for search results to populate
+    await sleep(settings.sendDelayMs)
+
+    // Arrow Down x2 to select the first search result, then Enter to open it
+    // (2x Down: first moves focus from search field to results list,
+    //  second selects the first result — safe to always do both)
+    const selectResultScript = `
+      tell application "System Events"
+        tell process "${appName}"
+          key code 125
+          delay 0.2
+          key code 125
+          delay 0.3
+          keystroke return
+        end tell
+      end tell
+    `
+    await runAppleScript(selectResultScript)
+
+    // Wait for the chat to load
+    await sleep(1000)
+
+    // Paste the message via clipboard (safer than keystroke for long/special text)
+    const pasteScript = `
+      set the clipboard to "${escapedMessage}"
+      delay 0.3
+      tell application "System Events"
+        tell process "${appName}"
+          keystroke "v" using command down
+        end tell
+      end tell
+    `
+    await runAppleScript(pasteScript)
+    await sleep(500)
+
+    if (isDryRun) {
+      return { success: true, dryRun: true }
+    }
+
+    // Press Enter to send
+    const sendScript = `
       tell application "System Events"
         tell process "${appName}"
           keystroke return

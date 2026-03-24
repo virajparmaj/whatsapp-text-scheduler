@@ -4,7 +4,7 @@
 Track current risks/defects prioritized by severity using repository evidence.
 
 ## Status
-Last updated: 2026-03-21 (production hardening sweep)
+Last updated: 2026-03-23
 
 ## Critical
 
@@ -60,10 +60,11 @@ Last updated: 2026-03-21 (production hardening sweep)
 - 19+ tests across scheduler logic, IPC contracts, and type mapping.
 - IPC input validation tests added.
 
-### 9) Dark mode config is incomplete
-- **Status:** Known — design debt
-- Tailwind dark mode enabled but no dark token overrides defined.
-- Low priority for personal use.
+### 9) Dark mode styling is incomplete
+- **Status:** Partially addressed — design debt remains
+- Theme picker added to Settings (system/light/dark) and persisted in DB.
+- Tailwind dark mode enabled, but dark token overrides (colors, borders, backgrounds) are not fully defined.
+- Light mode is fully styled; dark mode will show unstyled/inverted elements.
 
 ### 10) Packaging/signing readiness unclear
 - **Status:** Improved

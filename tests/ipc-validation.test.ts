@@ -9,10 +9,13 @@ import { join } from 'path'
  */
 
 type ScheduleType = 'one_time' | 'daily' | 'weekly' | 'quarterly' | 'half_yearly' | 'yearly'
+type RecipientType = 'contact' | 'group'
 
 interface CreateScheduleInput {
+  recipientType?: RecipientType
   phoneNumber: string
   contactName?: string
+  groupName?: string
   message: string
   scheduleType: ScheduleType
   scheduledAt?: string
@@ -30,8 +33,16 @@ const VALID_SCHEDULE_TYPES = new Set<ScheduleType>([
 const TIME_OF_DAY_RE = /^\d{2}:\d{2}$/
 
 function validateCreateInput(data: CreateScheduleInput): string | null {
-  if (!data.phoneNumber || typeof data.phoneNumber !== 'string' || data.phoneNumber.trim().length < 7) {
-    return 'Phone number is required (min 7 characters)'
+  const recipientType = data.recipientType || 'contact'
+
+  if (recipientType === 'group') {
+    if (!data.groupName || typeof data.groupName !== 'string' || data.groupName.trim().length < 1) {
+      return 'Group name is required for group schedules'
+    }
+  } else {
+    if (!data.phoneNumber || typeof data.phoneNumber !== 'string' || data.phoneNumber.trim().length < 7) {
+      return 'Phone number is required (min 7 characters)'
+    }
   }
   if (!data.message || typeof data.message !== 'string' || data.message.trim().length === 0) {
     return 'Message is required'
@@ -131,6 +142,65 @@ describe('IPC schedule input validation', () => {
       }
       expect(validateCreateInput(input)).toBeNull()
     }
+  })
+
+  // Group schedule validation
+  it('accepts valid group schedule', () => {
+    const input: CreateScheduleInput = {
+      recipientType: 'group',
+      phoneNumber: '',
+      groupName: 'Family Group',
+      message: 'Hello group!',
+      scheduleType: 'daily',
+      timeOfDay: '09:00'
+    }
+    expect(validateCreateInput(input)).toBeNull()
+  })
+
+  it('rejects group schedule without groupName', () => {
+    const input: CreateScheduleInput = {
+      recipientType: 'group',
+      phoneNumber: '',
+      groupName: '',
+      message: 'Hello',
+      scheduleType: 'daily',
+      timeOfDay: '09:00'
+    }
+    expect(validateCreateInput(input)).toContain('Group name')
+  })
+
+  it('rejects group schedule with whitespace-only groupName', () => {
+    const input: CreateScheduleInput = {
+      recipientType: 'group',
+      phoneNumber: '',
+      groupName: '   ',
+      message: 'Hello',
+      scheduleType: 'daily',
+      timeOfDay: '09:00'
+    }
+    expect(validateCreateInput(input)).toContain('Group name')
+  })
+
+  it('does not require phone for group schedules', () => {
+    const input: CreateScheduleInput = {
+      recipientType: 'group',
+      phoneNumber: '',
+      groupName: 'My Group',
+      message: 'Hello',
+      scheduleType: 'daily',
+      timeOfDay: '09:00'
+    }
+    expect(validateCreateInput(input)).toBeNull()
+  })
+
+  it('still requires phone for contact schedules (default recipientType)', () => {
+    const input: CreateScheduleInput = {
+      phoneNumber: '123',
+      message: 'Hello',
+      scheduleType: 'daily',
+      timeOfDay: '09:00'
+    }
+    expect(validateCreateInput(input)).toContain('Phone number')
   })
 })
 

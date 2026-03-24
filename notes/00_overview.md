@@ -4,16 +4,18 @@
 Document what this repository currently ships: a local macOS desktop scheduler for WhatsApp messages.
 
 ## Status
-- Last updated: 2026-03-21
+- Last updated: 2026-03-23
 - **Confirmed from code** for core runtime behavior.
-- Current maturity: solid personal utility with reliability hardening, logging, and packaging support.
+- Current maturity: solid personal utility with reliability hardening, logging, packaging, and improved UX controls.
 
 ## Confirmed from code
 - Product type: Electron desktop app (`electron/main.ts`) with React renderer (`src/App.tsx`).
+- App name: **WhatTime** (rebranded; migrates DB from legacy paths: WhaTime, whatsapp-text-scheduler, whatime, WA Scheduler).
 - Core capability: schedule WhatsApp sends via `whatsapp://` + AppleScript Enter automation (`electron/services/whatsapp.service.ts`).
 - Scheduling engine: in-process `node-schedule` jobs (`electron/services/scheduler.service.ts`).
 - Persistence: local SQLite via `better-sqlite3` (`electron/services/db.service.ts`).
 - Supported recurrence: `one_time`, `daily`, `weekly`, `quarterly`, `half_yearly`, `yearly`.
+- Recipient types: `contact` (phone) + `group` (controlled by `enableGroupScheduling` setting).
 - Reliability additions: recurring missed-run catch-up, retry backoff, screen-lock skip detection, single-instance lock.
 - Runtime resilience: close-to-tray behavior, optional open-at-login, wake resync, uncaught exception logging.
 - UI surface: tabbed app with Schedules, Calendar, Activity, Settings.
@@ -27,6 +29,7 @@ Document what this repository currently ships: a local macOS desktop scheduler f
 | Logs/history | Implemented in SQLite + Activity tab |
 | Calendar visualization | Implemented |
 | Contacts lookup | Implemented via AppleScript to macOS Contacts |
+| Conflict detection | Implemented (`schedule:checkConflicts` IPC, `findConflicts` in db.service) |
 | Authentication | Not implemented (single local-user model) |
 | Cloud backend/API | Not found in repository |
 | Automated tests | Implemented (`tests/*`, Vitest) |

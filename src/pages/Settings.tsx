@@ -299,6 +299,23 @@ export function Settings() {
         />
       </div>
 
+      {/* Experimental Features */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-3">
+          <Switch
+            checked={settings.enableGroupScheduling}
+            onCheckedChange={(v) => updateSetting('enable_group_scheduling', v ? '1' : '0')}
+          />
+          <div>
+            <Label>Enable Group Scheduling (Experimental)</Label>
+            <p className="text-xs text-muted-foreground">
+              Send scheduled messages to WhatsApp groups via UI automation.
+              Less reliable than contact scheduling. Defaults to dry-run.
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Developer */}
       <div className="rounded-lg border p-4 space-y-3">
         <h2 className="font-medium">Developer</h2>

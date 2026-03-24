@@ -13,8 +13,16 @@ const VALID_SCHEDULE_TYPES = new Set<ScheduleType>([
 const TIME_OF_DAY_RE = /^\d{2}:\d{2}$/
 
 function validateCreateInput(data: CreateScheduleInput): string | null {
-  if (!data.phoneNumber || typeof data.phoneNumber !== 'string' || data.phoneNumber.trim().length < 7) {
-    return 'Phone number is required (min 7 characters)'
+  const recipientType = data.recipientType || 'contact'
+
+  if (recipientType === 'group') {
+    if (!data.groupName || typeof data.groupName !== 'string' || data.groupName.trim().length < 1) {
+      return 'Group name is required for group schedules'
+    }
+  } else {
+    if (!data.phoneNumber || typeof data.phoneNumber !== 'string' || data.phoneNumber.trim().length < 7) {
+      return 'Phone number is required (min 7 characters)'
+    }
   }
   if (!data.message || typeof data.message !== 'string' || data.message.trim().length === 0) {
     return 'Message is required'
@@ -57,6 +65,10 @@ export function registerScheduleHandlers(): void {
     const validationError = validateCreateInput(data)
     if (validationError) {
       throw new Error(validationError)
+    }
+    // Safety: default group schedules to dry-run unless explicitly disabled
+    if (data.recipientType === 'group' && data.dryRun === undefined) {
+      data.dryRun = true
     }
     try {
       const schedule = db.createSchedule(data)
@@ -129,7 +141,9 @@ export function registerScheduleHandlers(): void {
   })
 
   ipcMain.handle('schedule:checkConflicts', (_, data: {
+    recipientType?: string
     phoneNumber: string
+    groupName?: string
     scheduleType: string
     scheduledAt?: string | null
     timeOfDay?: string | null
@@ -143,7 +157,9 @@ export function registerScheduleHandlers(): void {
         data.scheduledAt || null,
         data.timeOfDay || null,
         data.dayOfWeek ?? null,
-        data.excludeId
+        data.excludeId,
+        data.recipientType,
+        data.groupName
       )
     } catch (err) {
       log.error('checkConflicts failed', err)

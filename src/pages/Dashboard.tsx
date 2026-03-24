@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
-import { Plus, Pencil, Trash2, Play, Copy, CalendarClock, Clock, Search } from 'lucide-react'
+import { Plus, Pencil, Trash2, Play, Copy, CalendarClock, Clock, Search, Users } from 'lucide-react'
 import { truncate, formatDateTime, formatRelativeTime, getTimelineBucket, BUCKET_LABELS, type TimelineBucket } from '@/lib/utils'
 import type { Schedule, CreateScheduleInput } from '../../shared/types'
 
@@ -78,6 +78,7 @@ export function Dashboard() {
       (s) =>
         s.contactName.toLowerCase().includes(q) ||
         s.phoneNumber.toLowerCase().includes(q) ||
+        s.groupName.toLowerCase().includes(q) ||
         s.message.toLowerCase().includes(q)
     )
   }, [schedules, searchQuery])
@@ -143,8 +144,10 @@ export function Dashboard() {
 
   async function handleDuplicate(s: Schedule) {
     await create({
+      recipientType: s.recipientType,
       phoneNumber: s.phoneNumber,
       contactName: s.contactName,
+      groupName: s.groupName || undefined,
       message: s.message,
       scheduleType: s.scheduleType,
       scheduledAt: s.scheduledAt || undefined,
@@ -206,11 +209,17 @@ export function Dashboard() {
         {/* Info */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
+            {s.recipientType === 'group' && (
+              <Users className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            )}
             <span className="font-medium text-sm">
-              {s.contactName || s.phoneNumber}
+              {s.recipientType === 'group' ? s.groupName : (s.contactName || s.phoneNumber)}
             </span>
-            {s.contactName && (
+            {s.recipientType === 'contact' && s.contactName && (
               <span className="text-xs text-muted-foreground">{s.phoneNumber}</span>
+            )}
+            {s.recipientType === 'group' && (
+              <span className="text-xs text-muted-foreground">Group</span>
             )}
             <StatusBadge
               status={

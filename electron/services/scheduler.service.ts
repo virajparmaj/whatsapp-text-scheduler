@@ -1,6 +1,6 @@
 import * as schedule from 'node-schedule'
 import { getAllSchedules, getScheduleById, getSettings, insertRunLog, toggleSchedule, updateLastFiredAt } from './db.service'
-import { sendWhatsAppMessage } from './whatsapp.service'
+import { sendWhatsAppMessage, sendWhatsAppGroupMessage } from './whatsapp.service'
 import { runAppleScript } from '../utils/applescript'
 import { createLogger } from '../utils/logger'
 import type { Schedule, RunLog } from '../../shared/types'
@@ -85,6 +85,14 @@ function detectAndCatchUpMissedRuns(schedules: Schedule[]): void {
 
     // If never fired, or last fired before the most recent expected fire time
     if (!lastFired || lastFired < expected) {
+      // Don't catch up brand-new schedules that were created after the expected fire time
+      // e.g. schedule created at 1:36 AM for daily 09:00 — expected fire was yesterday 09:00
+      // This is not a "missed" run, it just hasn't had a chance to fire yet
+      const createdAt = new Date(s.createdAt)
+      if (!lastFired && createdAt > expected) {
+        continue
+      }
+
       const missedCount = lastFired ? 'at least 1' : 'unknown'
       insertRunLog(s.id, 'skipped', `Missed ${missedCount} run(s): app was not running`, undefined, expected.toISOString())
       log.info(`Catching up missed recurring schedule ${s.id} — firing now`)
@@ -381,11 +389,15 @@ async function executeJob(
       return entry
     }
 
-    const phoneMasked = s.phoneNumber.slice(0, -4).replace(/./g, '*') + s.phoneNumber.slice(-4)
-    log.info(`Executing ${scheduleId} (${s.scheduleType}) → ${phoneMasked}${s.dryRun ? ' [dry-run]' : ''}${retryAttempt > 0 ? ` [retry ${retryAttempt}]` : ''}`)
+    const recipientLabel = s.recipientType === 'group'
+      ? `group:"${s.groupName}"`
+      : s.phoneNumber.slice(0, -4).replace(/./g, '*') + s.phoneNumber.slice(-4)
+    log.info(`Executing ${scheduleId} (${s.scheduleType}) → ${recipientLabel}${s.dryRun ? ' [dry-run]' : ''}${retryAttempt > 0 ? ` [retry ${retryAttempt}]` : ''}`)
 
     const startTime = Date.now()
-    const result = await sendWhatsAppMessage(s.phoneNumber, s.message, s.dryRun)
+    const result = s.recipientType === 'group'
+      ? await sendWhatsAppGroupMessage(s.groupName, s.message, s.dryRun)
+      : await sendWhatsAppMessage(s.phoneNumber, s.message, s.dryRun)
     const durationMs = Date.now() - startTime
 
     let status: 'success' | 'failed' | 'dry_run'

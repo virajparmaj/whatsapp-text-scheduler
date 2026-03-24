@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
+import { TimePicker } from '@/components/ui/time-picker'
 import { CalendarDays } from 'lucide-react'
 
 const MONTHS = [
@@ -138,12 +139,10 @@ export function ExtendedScheduleDialog({
 
         {/* Time */}
         <div className="space-y-2">
-          <Label htmlFor="ext-time">Time</Label>
-          <Input
-            id="ext-time"
-            type="time"
+          <Label>Time</Label>
+          <TimePicker
             value={timeOfDay}
-            onChange={(e) => setTimeOfDay(e.target.value)}
+            onChange={(v) => setTimeOfDay(v)}
           />
         </div>
 

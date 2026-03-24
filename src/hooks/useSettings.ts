@@ -9,7 +9,8 @@ const defaultSettings: AppSettings = {
   whatsappApp: 'WhatsApp',
   openAtLogin: false,
   maxRetries: 3,
-  theme: 'system'
+  theme: 'system',
+  enableGroupScheduling: false
 }
 
 export function useSettings() {
