@@ -30,6 +30,7 @@ Capture the current visual/design language as implemented, since no standalone d
 ### Interaction style
 - Button variants and sizes centralized in `ui/button.tsx`.
 - Form primitives use shared `Input`, `Select`, `Textarea`, `Switch`, `Label` wrappers.
+- Date/time inputs: custom `DatePicker`, `TimePicker`, and `DateTimePicker` components in `src/components/ui/` — do not use native `<input type="date/time">`.
 - Dialog interactions via custom modal component in `ui/dialog.tsx`.
 - Toast feedback for key actions via `ui/toast.tsx`.
 

@@ -4,7 +4,7 @@
 Describe real user flows and where they are complete vs incomplete.
 
 ## Status
-- Last updated: 2026-03-21
+- Last updated: 2026-03-25
 - **Confirmed from code** for implemented flows below.
 
 ## Confirmed from code
@@ -17,12 +17,13 @@ Describe real user flows and where they are complete vs incomplete.
 
 ### 2) Create schedule
 1. User opens New Schedule modal from Schedules tab or Calendar empty date.
-2. User enters recipient (manual phone or Contacts search), message, schedule type.
-3. For one-time: pick future datetime.
-4. For daily/weekly: pick time/day.
-5. For quarterly/half-yearly/yearly: configure recurrence via Extended Schedule dialog.
-6. Optional dry-run toggle.
-7. Submit -> IPC `schedule:create` (validation) -> DB insert -> job registration -> UI refresh + toast.
+2. User selects recipient type: **Contact** (phone/name, with Contacts search) or **Group** (group name; only visible when `enableGroupScheduling` setting is on).
+3. User enters message and schedule type.
+4. For one-time: pick future datetime via `DateTimePicker`.
+5. For daily/weekly: pick time via `TimePicker` / day via dropdown.
+6. For quarterly/half-yearly/yearly: configure recurrence via Extended Schedule dialog.
+7. Optional dry-run toggle.
+8. Submit -> `schedule:checkConflicts` (warns if duplicate) -> IPC `schedule:create` (validation) -> DB insert -> job registration -> UI refresh + toast.
 
 ### 3) Edit schedule
 1. User clicks edit on a schedule card or calendar event popover.
@@ -57,7 +58,7 @@ Describe real user flows and where they are complete vs incomplete.
 ### 9) Settings flow
 1. Settings tab loads app settings from DB.
 2. User can check accessibility/contacts permission status.
-3. User updates global dry-run, default country code, send delay, app name, and start-at-login.
+3. User updates global dry-run, default country code, send delay, app name, start-at-login, max retries, theme, and group scheduling toggle.
 4. Settings save via immediate switches and debounced inputs.
 
 ### 10) Background runtime flow
@@ -73,10 +74,9 @@ Describe real user flows and where they are complete vs incomplete.
 
 ## Open issues / gaps
 - No first-run guided onboarding for permissions and reliability constraints.
-- No UI control for `max_retries` despite backend support.
 - No sync/backup workflow for restoring schedules across devices.
+- Group scheduling is experimental and gated behind the `enable_group_scheduling` setting; send reliability is lower than contact sends.
 
 ## Recommended next steps
 1. Add a startup checklist flow (permissions, WhatsApp running, dry-run recommendation).
-2. Add retry settings control + explanation in Settings.
-3. Add export/import + optional auto-backup flow.
+2. Add export/import + optional auto-backup flow.

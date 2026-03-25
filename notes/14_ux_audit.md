@@ -11,39 +11,40 @@ This is a comprehensive UX/product audit of a local-first macOS Electron app for
 1. **Functional local scheduler** — 6 recurrence types, in-process node-schedule, AppleScript send via `whatsapp://send` + `keystroke return`. Works.
 2. **Sleep/wake resync** — `powerMonitor.resume` cancels and re-registers all jobs, catches up missed recurring runs (one-shot per schedule). Solid.
 3. **Close-to-tray + start-at-login** — Window hides on close, tray icon persists, single-instance lock prevents duplicates. Good lifecycle.
-4. **Retry with exponential backoff** — 10s → 30s → 90s, non-retryable errors excluded. `max_retries` in DB but **no UI control**.
-5. **Dashboard groups schedules by timeline buckets** — Useful for small counts, but **no search, filter, or sort** once schedules exceed ~10.
+4. **Retry with exponential backoff** — 10s → 30s → 90s, non-retryable errors excluded. `max_retries` now controllable from Settings UI. ✅
+5. **Dashboard search + sort** — Search bar filters on contact name, phone, message; sort dropdown (next fire, A–Z, created, updated). ✅
 6. **Calendar shows planned fires only** — Green/yellow/gray dots for schedule state, but **no execution outcome overlay** (success/failure per day).
 7. **Activity Logs have basic status filter** — No date range, no per-schedule drill-down, no pagination (hardcoded 200 limit), truncated error messages.
-8. **No keyboard shortcuts** — All interactions require mouse. No `Cmd+N`, `Cmd+S`, `Escape` bindings.
+8. **Keyboard shortcut `Cmd+N`** for new schedule added. ✅
 9. **No first-run onboarding** — Users land on empty dashboard, may create a schedule before granting Accessibility permission → cryptic failure on first send.
-10. **No dark mode** — `darkMode: 'class'` configured in Tailwind but no `.dark` CSS variables defined. Glaring white on macOS Dark Mode.
-11. **No conflict detection** — Two schedules for same phone at same minute both fire → duplicate messages.
+10. **Theme picker added to Settings** (system/light/dark). Dark mode CSS tokens still incomplete — `.dark` CSS variable set not defined; toggle exists but appearance is unstyled.
+11. **Conflict detection implemented** — `schedule:checkConflicts` warns on duplicate recipient + fire time before save. ✅
 12. **No undo for destructive actions** — Delete is permanent (CASCADE wipes run_logs). 2-stage confirm exists but no soft-delete/undo.
 13. **No message templates** — Users re-type identical messages across yearly birthday schedules.
 14. **No export/import/backup** — Single point of failure: one SQLite file, no way to back up or migrate.
 15. **App stops scheduling if force-killed** — No LaunchAgent keepalive. Scheduler lives only in Electron process memory.
+16. **Experimental group scheduling added** — `enableGroupScheduling` setting gates group mode; uses UI automation (search + clipboard). Less reliable than contact sends. ✅
 
 ---
 
 ## 2) UX + Efficiency Audit Table
 
-| # | Area | Current Issue | Why It Hurts | Sev | Effort | Recommended Fix | Success Metric |
-|---|------|--------------|-------------|-----|--------|----------------|----------------|
-| 1 | Dashboard | No search or filter | 10+ schedules → manual scanning | H | S | Search input filtering on `contactName`, `phoneNumber`, `message` in `Dashboard.tsx` | Find schedule in <2s vs ~15s scanning |
-| 2 | Onboarding | No first-run guidance | Users fail on first send (missing Accessibility permission) | H | S | 3-step wizard modal: permissions → test schedule → done. New `OnboardingWizard.tsx` | First-time send success >90% |
-| 3 | Reliability | No LaunchAgent keepalive | Force-kill or crash = scheduler dead until manual relaunch | H | M | Write macOS LaunchAgent plist on first run, register via `launchctl` | Scheduler uptime >99.5% across reboots |
-| 4 | Dashboard | No bulk operations | Pausing 8 schedules for vacation = 8 clicks | H | M | Select mode + sticky action bar for bulk pause/resume/delete | Bulk op on N schedules = 3 clicks instead of 2N |
-| 5 | Safety | No conflict detection | Same phone + same minute = duplicate message sent | M | M | Pre-save query for overlapping phone + fire time. Warning banner in `ScheduleForm.tsx` | Zero accidental duplicate sends |
-| 6 | Calendar | No execution outcomes | Dots show plan, not results — can't spot failure patterns | M | M | Query `run_logs` for visible month, overlay red/green indicators per day | Failure patterns visible without switching to Logs |
-| 7 | Logs | No date range or schedule filter | Scanning 200 entries to find Tuesday's failure | M | M | Date range quick-select + schedule dropdown + offset/limit pagination | Relevant log found in <5s |
-| 8 | Settings | No max_retries UI | Power users can't tune retry behavior without DB hacking | M | S | Numeric input (1–10) with `DebouncedInput` in `Settings.tsx` | Setting controllable from UI |
-| 9 | Dark mode | Not implemented | White app on macOS Dark Mode is jarring | M | S | `.dark` CSS variables in `index.css` + theme toggle in Settings | App respects system appearance |
-| 10 | Keyboard | No shortcuts | Power users forced to mouse for every action | M | S | `Cmd+N` (new), `Escape` (close modal), `Cmd+,` (settings) in `App.tsx` | Core flows keyboard-accessible |
-| 11 | Delete safety | No undo | Accidental confirm = permanent data loss (CASCADE deletes logs) | M | M | Soft-delete (`deleted_at` column), undo toast (5s), auto-purge after 30 days | Zero accidental permanent data loss |
-| 12 | Productivity | No message templates | Re-typing "Happy Birthday" for 20 yearly schedules | L | M | `message_templates` table + CRUD UI + template picker in form | Schedule creation time drops for repeated patterns |
-| 13 | Logs | No retry chain visualization | `retry_attempt` and `retry_of` fields exist but aren't shown | L | S | Indented sub-entries with "Retry 1/3" label + link to original run | Retry behavior transparent to user |
-| 14 | Diagnostics | No "why didn't it send?" panel | Debugging failures requires raw log scanning | M | L | Per-schedule health view: last 5 runs, system state at fire time, retry chain | Support burden for "it didn't send" → near zero |
+| # | Area | Status | Current Issue / Fix | Sev | Effort |
+|---|------|--------|---------------------|-----|--------|
+| 1 | Dashboard | ✅ DONE | Search bar + sort dropdown added (`Dashboard.tsx`) | H | S |
+| 2 | Onboarding | ❌ TODO | No first-run guidance → users fail on first send (missing Accessibility) | H | S |
+| 3 | Reliability | ❌ TODO | No LaunchAgent keepalive → force-kill stops scheduler | H | M |
+| 4 | Dashboard | ❌ TODO | No bulk operations → pausing multiple schedules = N clicks | H | M |
+| 5 | Safety | ✅ DONE | Conflict detection via `schedule:checkConflicts` in `ScheduleForm.tsx` | M | M |
+| 6 | Calendar | ❌ TODO | No execution outcome overlay — dots show plan, not results | M | M |
+| 7 | Logs | ❌ TODO | No date range or schedule filter; hardcoded 200 limit | M | M |
+| 8 | Settings | ✅ DONE | `max_retries` numeric input (1–10) added to `Settings.tsx` | M | S |
+| 9 | Dark mode | ❌ TODO | Theme toggle added; `.dark` CSS token set still not defined in `index.css` | M | S |
+| 10 | Keyboard | ✅ DONE | `Cmd+N` opens new schedule modal | M | S |
+| 11 | Delete safety | ❌ TODO | No undo — delete is permanent (CASCADE wipes logs) | M | M |
+| 12 | Productivity | ❌ TODO | No message templates for repeated messages | L | M |
+| 13 | Logs | ❌ TODO | Retry chain (`retry_attempt`/`retry_of`) fields exist but not rendered | L | S |
+| 14 | Diagnostics | ❌ TODO | No per-schedule health view for debugging send failures | M | L |
 
 ---
 
@@ -51,27 +52,16 @@ This is a comprehensive UX/product audit of a local-first macOS Electron app for
 
 ### Dashboard (`src/pages/Dashboard.tsx`)
 
-**Top usability issues:**
-- No search/filter — unsustainable past 10 schedules
-- No sort options (next fire, contact A-Z, recently created)
-- Action buttons are identical ghost icons — easy to misclick (edit vs delete)
-- No link from a schedule card to its execution history
+**Implemented:**
+- ✅ Search bar filters on `contactName`, `phoneNumber`, `message`
+- ✅ Sort dropdown — "Next fire" | "Contact A–Z" | "Recently created" | "Recently updated"
+- ✅ `Cmd+N` opens ScheduleModal
 
-**Proposed UI changes:**
-1. **Search bar** below header — `<Input>` with search icon, `useMemo` filter on `contactName + phoneNumber + message`
-2. **Sort dropdown** next to search — "Next fire (soonest)" | "Contact A–Z" | "Recently created" | "Recently updated"
-3. **Count badges** on bucket headers — "Upcoming (Next 30 days) — 5 schedules"
-4. **"View history" button** per card (clock icon) — sets context and switches tab to Logs pre-filtered by `scheduleId`
-5. **Compact table view toggle** for 20+ schedules — contact | message | type | next fire | toggle | actions
-6. **Today summary card** at top — "3 sent, 1 failed, 2 upcoming" with expandable detail
-
-**Keyboard/accessibility:**
-- `Cmd+N` opens ScheduleModal
-- Cards: `role="listitem"`, bucket groups: `role="list"`
-- Toggle: `aria-label="Enable schedule for {contactName}"`
-- Destructive confirm: auto-focus "Cancel" not "Confirm"
-
-**Expected impact:** Daily monitoring becomes glanceable. Schedule management scales to 50+ entries.
+**Remaining issues:**
+- No "View history" link from card to Logs filtered by schedule
+- No compact/table view toggle for 20+ schedules
+- No "Today summary" card
+- Bulk operations (pause/resume/delete multiple) not implemented
 
 ---
 
@@ -123,24 +113,16 @@ This is a comprehensive UX/product audit of a local-first macOS Electron app for
 
 ### Settings (`src/pages/Settings.tsx`)
 
-**Top usability issues:**
-- `max_retries` missing from UI
-- No dark mode toggle
-- No app version / DB stats
-- No data export/import
+**Implemented:**
+- ✅ `max_retries` numeric input (1–10)
+- ✅ Theme picker (system / light / dark) — toggle works; `.dark` CSS tokens still needed
+- ✅ Group scheduling toggle (`enable_group_scheduling`)
+- ✅ Developer "Rebuild App" button
 
-**Proposed UI changes:**
-1. **max_retries control** — numeric input (1–10) with description
-2. **Dark mode toggle** — Switch adding/removing `.dark` class on `<html>`. Persist as `theme` setting (`system` | `light` | `dark`)
-3. **About section** — app version (`app.getVersion()` via IPC), DB path, schedule count, total log entries
-4. **Export/Import buttons** — JSON file via `dialog.showSaveDialog` / `dialog.showOpenDialog`
-5. **Grouped sections** — Permissions | Behavior | Appearance | Data | Advanced | About
-
-**Keyboard/accessibility:**
-- `Cmd+,` opens Settings tab
-- All toggles get visible focus rings (`focus-visible:ring-2`)
-
-**Expected impact:** Settings becomes a comprehensive control panel. Power users can tune all behavior.
+**Remaining issues:**
+- No About section (app version, DB path, stats)
+- No export/import buttons
+- Dark mode toggle exists but appearance is unstyled (`.dark` CSS variable set missing)
 
 ---
 

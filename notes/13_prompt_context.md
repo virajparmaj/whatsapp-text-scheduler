@@ -4,7 +4,7 @@
 Reusable context for future coding agents working on this repository.
 
 ## Status
-- Last updated: 2026-03-21
+- Last updated: 2026-03-25
 - **Confirmed from code** baseline.
 - Keep this file updated whenever architecture/contracts materially change.
 
@@ -49,6 +49,8 @@ Reusable context for future coding agents working on this repository.
 - Dry-run semantics (schedule-level and global override).
 - Local-only data model unless explicit product direction changes.
 - Permission checks and user-facing guidance in Settings.
+- `RecipientType` (`contact` | `group`) on all schedule/log shapes — group mode is feature-flagged via `enableGroupScheduling` setting.
+- Custom date/time pickers (`DatePicker`, `TimePicker`, `DateTimePicker` in `src/components/ui/`) — don't replace with native inputs.
 
 ## Current weak points
 - In-process scheduler still depends on process uptime (force-quit risk).

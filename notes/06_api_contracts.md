@@ -4,7 +4,7 @@
 Document the frontend/backend contract surface that exists in this repo.
 
 ## Status
-- Last updated: 2026-03-21
+- Last updated: 2026-03-25
 - **Confirmed from code**: runtime contracts are Electron IPC channels, not HTTP endpoints.
 - **Not found in repository**: REST/GraphQL server, RPC gateway, cloud auth API.
 
@@ -24,6 +24,7 @@ Document the frontend/backend contract surface that exists in this repo.
 - `schedule:toggle(id, enabled) -> Schedule`
 - `schedule:testSend(id) -> SendResult`
 - `schedule:getNextFireTimes() -> Record<string, string | null>`
+- `schedule:checkConflicts({ recipientType?, phoneNumber, groupName?, scheduleType, scheduledAt?, timeOfDay?, dayOfWeek?, dayOfMonth?, monthOfYear?, excludeId? }) -> Schedule[]`
 
 ### Logs channels
 - `logs:getAll(limit?) -> RunLog[]`
@@ -46,7 +47,8 @@ Document the frontend/backend contract surface that exists in this repo.
 - Hooks/context subscribe and refresh schedules/logs.
 
 ### Validation and error behavior
-- `schedule:create` validates phone/message/type/time shape in handler before DB write.
+- `schedule:create` validates phone/message/type/time shape in handler before DB write; also validates group name when `recipientType = 'group'`.
+- `schedule:checkConflicts` routes conflict lookup by recipient type: group schedules match on `group_name`, contact schedules match on normalized phone number.
 - `settings:update` rejects unsupported keys via whitelist in DB service.
 - IPC handlers mostly throw on failure; renderer promise rejects.
 - Contacts search maps permission denial to a user-facing explicit error message.

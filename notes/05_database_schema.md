@@ -4,7 +4,7 @@
 Document the implemented local database model and behavior used by the app.
 
 ## Status
-- Last updated: 2026-03-21
+- Last updated: 2026-03-25
 - **Confirmed from code**: SQLite schema/mappings in `electron/services/db.service.ts`.
 - Runtime `SCHEMA` in `db.service.ts` is the canonical source in this repo.
 
@@ -18,8 +18,10 @@ Document the implemented local database model and behavior used by the app.
 ### Table: `schedules`
 Columns implemented in runtime SCHEMA:
 - `id TEXT PRIMARY KEY`
+- `recipient_type TEXT NOT NULL DEFAULT 'contact'` (migration-added; values: `'contact'` | `'group'`)
 - `phone_number TEXT NOT NULL`
 - `contact_name TEXT NOT NULL DEFAULT ''`
+- `group_name TEXT NOT NULL DEFAULT ''` (migration-added; used when `recipient_type = 'group'`)
 - `message TEXT NOT NULL`
 - `schedule_type TEXT NOT NULL`
 - `scheduled_at TEXT`
@@ -37,6 +39,8 @@ Usage notes:
 - One-time schedules use `scheduled_at`.
 - Daily/weekly use `time_of_day`; weekly also uses `day_of_week`.
 - Quarterly/half-yearly/yearly use `day_of_month` and `month_of_year`.
+- Contact schedules: `phone_number` is the recipient; `group_name` is empty.
+- Group schedules: `group_name` is the recipient; `phone_number` is empty.
 
 ### Table: `run_logs`
 Columns implemented in runtime SCHEMA/migrations:
@@ -66,6 +70,8 @@ Seeded default keys:
 - `whatsapp_app = 'WhatsApp'`
 - `open_at_login = '0'`
 - `max_retries = '3'`
+- `enable_group_scheduling = '0'`
+- `theme = 'system'`
 
 ### Relationships and ownership
 - `schedules (1) -> (many) run_logs` via `schedule_id`, cascade delete enabled.
