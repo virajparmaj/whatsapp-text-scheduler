@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react'
-import { Dashboard } from '@/pages/Dashboard'
-import { CalendarPage } from '@/pages/Calendar'
-import { Logs } from '@/pages/Logs'
-import { Settings } from '@/pages/Settings'
+import { useState, useEffect, lazy, Suspense } from 'react'
+
+const Dashboard = lazy(() => import('@/pages/Dashboard').then(m => ({ default: m.Dashboard })))
+const CalendarPage = lazy(() => import('@/pages/Calendar').then(m => ({ default: m.CalendarPage })))
+const Logs = lazy(() => import('@/pages/Logs').then(m => ({ default: m.Logs })))
+const Settings = lazy(() => import('@/pages/Settings').then(m => ({ default: m.Settings })))
 import { ToastProvider } from '@/components/ui/toast'
 import { ScheduleProvider } from '@/contexts/ScheduleContext'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
@@ -119,10 +120,12 @@ export default function App() {
 
         {/* Content */}
         <main className="flex-1 overflow-y-auto">
-          {activeTab === 'dashboard' && <Dashboard />}
-          {activeTab === 'calendar' && <CalendarPage />}
-          {activeTab === 'logs' && <Logs />}
-          {activeTab === 'settings' && <Settings />}
+          <Suspense fallback={null}>
+            {activeTab === 'dashboard' && <Dashboard />}
+            {activeTab === 'calendar' && <CalendarPage />}
+            {activeTab === 'logs' && <Logs />}
+            {activeTab === 'settings' && <Settings />}
+          </Suspense>
         </main>
       </div>
       </ScheduleProvider>

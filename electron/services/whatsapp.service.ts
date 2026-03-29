@@ -130,7 +130,7 @@ export async function sendWhatsAppGroupMessage(
 
     // Phase 1: Activate WhatsApp and reset state
     // Press Escape twice to dismiss any open dialogs (Forward, in-chat search, etc.)
-    log.info(`Group send → "${groupName}": activating and resetting state`)
+    log.info(`[phase 1] Group send → "${groupName}": activating and resetting state`)
     const resetScript = `
       tell application "${appName}" to activate
       delay 0.8
@@ -143,35 +143,34 @@ export async function sendWhatsAppGroupMessage(
         end tell
       end tell
     `
-    await runAppleScript(resetScript)
+    const resetResult = await runAppleScript(resetScript)
+    log.info(`[phase 1] reset script result: "${resetResult}"`)
     await sleep(300)
 
-    // Phase 2: Open global search via Cmd+K (most reliable cross-version method)
-    // Cmd+K opens search regardless of current UI state — no AX element targeting needed
-    log.info(`Group send → "${groupName}": opening search via Cmd+K`)
+    // Phase 2: Open sidebar search via Cmd+F, then type the group name.
+    // Cmd+F jumps directly to the sidebar search bar in WhatsApp Desktop.
+    // No need to clear the field — Cmd+F always opens a fresh, empty search.
+    log.info(`[phase 2] Group send → "${groupName}" (escaped: "${escapedGroupName}"): opening search via Cmd+F`)
     const searchScript = `
       tell application "System Events"
         tell process "${appName}"
-          keystroke "k" using command down
+          keystroke "f" using command down
           delay 0.5
-          keystroke "a" using command down
-          delay 0.1
-          key code 51
-          delay 0.3
           keystroke "${escapedGroupName}"
         end tell
       end tell
     `
-    await runAppleScript(searchScript)
+    const searchResult = await runAppleScript(searchScript)
+    log.info(`[phase 2] search script result: "${searchResult}"`)
 
     // Phase 3: Wait for search results to populate (minimum 2s for group search)
-    log.info(`Group send → "${groupName}": waiting for search results`)
+    log.info(`[phase 3] Group send → "${groupName}": waiting for search results`)
     await sleep(Math.max(settings.sendDelayMs, 2000))
 
-    // Phase 4: Select the first search result and open the chat
-    // Arrow Down x2: first moves focus from search field to results list,
-    // second selects the first result — then Enter to open it
-    log.info(`Group send → "${groupName}": selecting first result`)
+    // Phase 4: Select the first search result and open the chat.
+    // Arrow Down x2: first moves focus from the search field to the results list,
+    // second highlights the first result — then Enter to open it.
+    log.info(`[phase 4] Group send → "${groupName}": selecting first result`)
     const selectResultScript = `
       tell application "System Events"
         tell process "${appName}"
@@ -183,13 +182,14 @@ export async function sendWhatsAppGroupMessage(
         end tell
       end tell
     `
-    await runAppleScript(selectResultScript)
+    const selectResult = await runAppleScript(selectResultScript)
+    log.info(`[phase 4] select result script result: "${selectResult}"`)
 
     // Wait for the chat to fully load before pasting
     await sleep(1500)
 
     // Phase 5: Paste the message via clipboard (safer than keystroke for long/special text)
-    log.info(`Group send → "${groupName}": pasting message`)
+    log.info(`[phase 5] Group send → "${groupName}": pasting message`)
     const pasteScript = `
       set the clipboard to "${escapedMessage}"
       delay 0.3
@@ -199,16 +199,17 @@ export async function sendWhatsAppGroupMessage(
         end tell
       end tell
     `
-    await runAppleScript(pasteScript)
+    const pasteResult = await runAppleScript(pasteScript)
+    log.info(`[phase 5] paste script result: "${pasteResult}"`)
     await sleep(500)
 
     if (isDryRun) {
-      log.info(`Group send → "${groupName}": dry-run complete (Enter skipped)`)
+      log.info(`[phase 5] Group send → "${groupName}": dry-run complete (Enter skipped)`)
       return { success: true, dryRun: true }
     }
 
     // Phase 6: Press Enter to send
-    log.info(`Group send → "${groupName}": sending`)
+    log.info(`[phase 6] Group send → "${groupName}": sending`)
     const sendScript = `
       tell application "System Events"
         tell process "${appName}"
@@ -216,9 +217,10 @@ export async function sendWhatsAppGroupMessage(
         end tell
       end tell
     `
-    await runAppleScript(sendScript)
+    const sendResult = await runAppleScript(sendScript)
+    log.info(`[phase 6] send script result: "${sendResult}"`)
 
-    log.info(`Group send → "${groupName}": sent successfully`)
+    log.info(`[phase 6] Group send → "${groupName}": sent successfully`)
     return { success: true, dryRun: false }
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error)

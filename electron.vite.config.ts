@@ -35,6 +35,13 @@ export default defineConfig({
       rollupOptions: {
         input: {
           index: resolve('src/index.html')
+        },
+        output: {
+          manualChunks: {
+            'vendor-react': ['react', 'react-dom'],
+            'vendor-date-fns': ['date-fns'],
+            'vendor-lucide': ['lucide-react']
+          }
         }
       }
     },

@@ -4,7 +4,7 @@
 Track current risks/defects prioritized by severity using repository evidence.
 
 ## Status
-Last updated: 2026-03-23
+Last updated: 2026-03-26
 
 ## Critical
 
@@ -29,6 +29,23 @@ Last updated: 2026-03-23
 - **Status:** FIXED
 - Backend `testSend` handler now converts `RunLog` to `SendResult` format at the IPC boundary.
 - Frontend receives `{ success, error?, dryRun }` as expected.
+
+### 11) Group messaging: search bar targeting was broken
+- **Status:** FIXED (commit c1c1c84)
+- Original code used `Cmd+F` which opens WhatsApp's in-chat message search, not the sidebar contact/group search.
+- Group name was typed into the wrong search field — navigation to the group never happened.
+- Fix: replaced `Cmd+F` with 3-tier AX fallback (text field click → toolbar click → `Cmd+K`).
+- Added Escape-to-reset phase to clear stale dialogs before search.
+
+### 12) Group messaging: inherent UI automation fragility
+- **Status:** Known limitation (inherent to AppleScript approach)
+- Group sends require 6-phase UI automation (~5+ seconds of active UI control).
+- **AX path fragility:** Element paths (`text field 1 of group 1 of window 1`) are WhatsApp-version-dependent. May break on WhatsApp updates.
+- **Wrong-chat risk:** No post-selection verification. If search returns a contact instead of the group, message goes to the wrong recipient.
+- **Timing dependency:** Fixed `sendDelayMs` wait (3000ms) between search typing and result selection. Fails if WhatsApp is slow to populate results.
+- **Reliability ceiling:** ~85-90% for personal use. Cannot guarantee correct group targeting.
+- **Mitigations in place:** feature-flagged (off by default), auto dry-run for new group schedules, staggered catch-ups (8s apart), structured phase logging.
+- **Recommended next hardening step:** add post-selection chat verification (read AX chat header, compare to group name, abort on mismatch).
 
 ## Medium
 
@@ -76,4 +93,5 @@ Last updated: 2026-03-23
 ## Remaining risks
 - Force-killed process = lost schedules until relaunch.
 - AppleScript automation depends on WhatsApp Desktop UI stability.
+- Group messaging can send to wrong chat if group name matches a contact name (no verification yet).
 - No structured reliability SLO documented for users.

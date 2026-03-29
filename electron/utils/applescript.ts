@@ -20,6 +20,14 @@ export function runAppleScript(script: string, timeoutMs = 10000): Promise<strin
                 'Accessibility permission not granted. Go to System Settings > Privacy & Security > Accessibility and add this app.'
               )
             )
+          } else if (msg.includes('-1743')) {
+            // -1743 = not authorized to send Apple events to target application
+            // Requires Automation permission (separate from Accessibility)
+            reject(
+              new Error(
+                'Automation permission not granted. Go to System Settings > Privacy & Security > Automation and enable WhatTime to control System Events.'
+              )
+            )
           } else {
             reject(new Error(msg))
           }
