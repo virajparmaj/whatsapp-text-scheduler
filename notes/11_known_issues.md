@@ -4,7 +4,7 @@
 Track current risks/defects prioritized by severity using repository evidence.
 
 ## Status
-Last updated: 2026-03-26
+Last updated: 2026-03-30
 
 ## Critical
 
@@ -31,11 +31,11 @@ Last updated: 2026-03-26
 - Frontend receives `{ success, error?, dryRun }` as expected.
 
 ### 11) Group messaging: search bar targeting was broken
-- **Status:** FIXED (commit c1c1c84)
-- Original code used `Cmd+F` which opens WhatsApp's in-chat message search, not the sidebar contact/group search.
-- Group name was typed into the wrong search field — navigation to the group never happened.
-- Fix: replaced `Cmd+F` with 3-tier AX fallback (text field click → toolbar click → `Cmd+K`).
-- Added Escape-to-reset phase to clear stale dialogs before search.
+- **Status:** FIXED (commits c1c1c84, b768721)
+- Original code used `Cmd+F` which opened WhatsApp's in-chat message search, not the sidebar search.
+- Group name was typed into the wrong field — navigation to the group never happened.
+- Fix: added double-Escape reset phase (Phase 1) to clear stale dialogs, then uses `Cmd+F` to open sidebar search (Phase 2), arrow-down navigation to select result (Phase 4), and clipboard paste for message (Phase 5).
+- Current flow is 6 phases with structured per-phase logging for debugging.
 
 ### 12) Group messaging: inherent UI automation fragility
 - **Status:** Known limitation (inherent to AppleScript approach)

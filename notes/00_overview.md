@@ -4,7 +4,7 @@
 Document what this repository currently ships: a local macOS desktop scheduler for WhatsApp messages.
 
 ## Status
-- Last updated: 2026-03-23
+- Last updated: 2026-03-30
 - **Confirmed from code** for core runtime behavior.
 - Current maturity: solid personal utility with reliability hardening, logging, packaging, and improved UX controls.
 

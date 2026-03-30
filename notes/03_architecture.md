@@ -4,7 +4,7 @@
 Describe runtime architecture, data movement, and platform dependencies.
 
 ## Status
-- Last updated: 2026-03-21
+- Last updated: 2026-03-30
 - **Confirmed from code** for process boundaries, IPC, DB, scheduler, and automation.
 - **Not found in repository**: external backend service, cloud API, or account system.
 
@@ -14,6 +14,7 @@ Describe runtime architecture, data movement, and platform dependencies.
 - React 18 + TypeScript renderer built via Vite/electron-vite (`src/*`, `electron.vite.config.ts`).
 - Tailwind CSS + local UI primitives in `src/components/ui`.
 - App shell uses tab state, not URL router (`src/App.tsx`).
+- Manual chunk split for renderer bundle: `vendor-react`, `vendor-date-fns`, `vendor-lucide` (`electron.vite.config.ts`).
 
 ### Backend stack (local main process)
 - Electron main process hosts persistence, scheduling, and automation services.
@@ -69,8 +70,10 @@ node-schedule fires -> executeJob(scheduleId)
 
 ## Important details
 - One-time missed schedules are skipped + auto-disabled at startup.
-- Recurring missed schedules get a one-shot immediate catch-up execution.
+- Recurring missed schedules get a one-shot immediate catch-up execution; group catch-ups are staggered 8s apart to avoid WhatsApp UI collisions.
+- Recency guard (`CATCH_UP_RECENCY_THRESHOLD_MS = 2min`) prevents redundant catch-ups on rapid wake/restart cycles.
 - Retry backoff is implemented for retryable failures (respecting `max_retries`).
+- Scheduler maintains three in-memory maps: `jobs` (active node-schedule jobs), `pendingRetries` (retry timeouts), `pendingCatchUps` (group catch-up timeouts). All are cleared on shutdown.
 - Main process emits both IPC execution events and native notifications.
 
 ## Open issues / gaps

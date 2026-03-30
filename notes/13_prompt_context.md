@@ -4,7 +4,7 @@
 Reusable context for future coding agents working on this repository.
 
 ## Status
-- Last updated: 2026-03-25
+- Last updated: 2026-03-30
 - **Confirmed from code** baseline.
 - Keep this file updated whenever architecture/contracts materially change.
 
@@ -65,7 +65,8 @@ Reusable context for future coding agents working on this repository.
 - Multi-user permission model
 
 ## Validation baseline
-- Tests currently exist for scheduler logic, IPC channel completeness, IPC input validation, and type mapping.
+- Tests currently exist for scheduler logic, IPC channel completeness, IPC input validation, type mapping, and group send behavior (66 tests across 5 files).
+- New test file: `tests/whatsapp-group.test.ts` covers group send phases and catch-up logic.
 - Minimum pre-merge check: `npm run test` and `npm run build`.
 
 ## Recommended next steps for future agents

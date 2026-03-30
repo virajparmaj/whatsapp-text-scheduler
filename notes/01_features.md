@@ -4,7 +4,7 @@
 Inventory product features based on actual implementation, grouped by implementation status.
 
 ## Status
-- Last updated: 2026-03-23
+- Last updated: 2026-03-30
 - **Confirmed from code** for implemented groups below.
 
 ## Confirmed implemented
@@ -16,7 +16,7 @@ Inventory product features based on actual implementation, grouped by implementa
 - Recurrence types implemented: one-time, daily, weekly, quarterly, half-yearly, yearly (`shared/types.ts`, `scheduler.service.ts`, `ScheduleForm.tsx`).
 - Recipient types: `contact` (phone number) and `group` (`enableGroupScheduling` setting gates group mode in the form).
 - Extended schedule dialog for quarterly/half-yearly/yearly config (`ExtendedScheduleDialog.tsx`) with `TimePicker` component.
-- Conflict detection on create/edit: warns if same phone + overlapping fire time already exists (`schedule:checkConflicts`, `findConflicts`).
+- Conflict detection on create/edit: warns if same recipient (phone for contacts, group name for groups) + overlapping fire time already exists (`schedule:checkConflicts`, `findConflicts`).
 - One-time auto-disable after execution attempt and skip handling for missed one-time startup cases.
 - Startup/wake catch-up for missed recurring schedules (`detectAndCatchUpMissedRuns`).
 - Retry with exponential backoff for transient failures (10s → 30s → 90s; max from settings).
@@ -60,7 +60,6 @@ Inventory product features based on actual implementation, grouped by implementa
 
 ## Not implemented but implied
 - Background daemon/LaunchAgent to execute schedules when the app process is fully stopped.
-- Conflict detection for overlapping schedules to same recipient/time.
 - Message template/snippets library.
 - Multi-device sync/backup workflow.
 

@@ -4,7 +4,7 @@
 Provide a practical, repo-specific plan of improvements aligned with current architecture.
 
 ## Status
-- Last updated: 2026-03-23
+- Last updated: 2026-03-30
 - Items below are **proposed next steps** after the recent UX pass.
 
 ## Recently completed (current branch/code state)
@@ -23,6 +23,8 @@ Provide a practical, repo-specific plan of improvements aligned with current arc
 13. Group scheduling support (`RecipientType`, `enableGroupScheduling` setting).
 14. `ExtendedScheduleDialog` for quarterly/half-yearly/yearly time config.
 15. Developer “Rebuild App” button in Settings.
+16. Group send repaired: double-Escape reset + Cmd+F sidebar search with 6-phase structured flow; group catch-up staggered 8s apart; recency guard prevents redundant catch-ups.
+17. Bundle optimization: manual chunks (`vendor-react`, `vendor-date-fns`, `vendor-lucide`) in `electron.vite.config.ts`; app icon size reduced.
 
 ## Next priority (high impact)
 1. Add first-run onboarding checklist (Accessibility, Contacts, WhatsApp readiness, reliability notes).
@@ -39,7 +41,7 @@ Provide a practical, repo-specific plan of improvements aligned with current arc
 ## Better workflow
 1. Add templates/snippets for repeated messages.
 2. Add bulk operations (pause/resume/delete multiple schedules).
-3. Add guardrails in create flow (conflict warning for same recipient/time).
+3. ~~Add guardrails in create flow (conflict warning for same recipient/time).~~ ✅ Done (see completed #12)
 4. Add import/export (JSON) with validation + preview before apply.
 5. Add undo window for destructive actions (delete schedule, clear logs).
 

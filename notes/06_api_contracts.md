@@ -4,7 +4,7 @@
 Document the frontend/backend contract surface that exists in this repo.
 
 ## Status
-- Last updated: 2026-03-25
+- Last updated: 2026-03-30
 - **Confirmed from code**: runtime contracts are Electron IPC channels, not HTTP endpoints.
 - **Not found in repository**: REST/GraphQL server, RPC gateway, cloud auth API.
 
@@ -41,6 +41,9 @@ Document the frontend/backend contract surface that exists in this repo.
 - `contacts:search(query) -> Contact[]`
 - `contacts:checkAccess() -> AccessibilityStatus`
 - `contacts:openSettings() -> void`
+
+### Developer channels
+- `app:rebuild() -> { success: boolean; error?: string }` — triggers in-place native module rebuild via `electron-rebuild` (`electron/ipc/settings.ipc.ts`)
 
 ### Push event contract
 - Main emits `schedule:executed` event to renderer with run-log payload.
