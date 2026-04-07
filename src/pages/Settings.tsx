@@ -84,7 +84,7 @@ export function Settings() {
 
   return (
     <div className="p-6 space-y-6 max-w-2xl">
-      <h1 className="text-xl font-semibold">Settings</h1>
+      <h1 className="text-xl font-semibold app-drag-region">Settings</h1>
 
       {/* Accessibility Permission */}
       <div className="rounded-lg border p-4 space-y-3">

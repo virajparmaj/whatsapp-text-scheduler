@@ -11,7 +11,7 @@ interface DialogProps {
 function Dialog({ open, onOpenChange, children }: DialogProps): React.ReactElement | null {
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-50">
+    <div className="fixed inset-0 z-50 app-no-drag">
       <div className="fixed inset-0 bg-black/50 animate-fade-in" onClick={() => onOpenChange(false)} />
       <div className="fixed inset-0 flex items-center justify-center p-4">
         <div

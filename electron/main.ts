@@ -74,6 +74,7 @@ function createWindow(): void {
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
+
 }
 
 function createTray(): void {
@@ -85,7 +86,7 @@ function createTray(): void {
 
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: 'Show Window',
+      label: 'Show',
       click: () => {
         if (mainWindow) {
           mainWindow.show()
@@ -97,7 +98,7 @@ function createTray(): void {
     },
     { type: 'separator' },
     {
-      label: `Quit ${APP_NAME}`,
+      label: 'Quit',
       click: () => {
         isQuitting = true
         app.quit()
@@ -136,9 +137,7 @@ app.whenReady().then(() => {
   log.info(`logs path     : ${app.getPath('logs')}`)
   log.info(`exe path      : ${app.getPath('exe')}`)
 
-  if (process.platform === 'darwin') {
-    app.dock?.hide()
-  }
+  if (process.platform === 'darwin') app.dock?.hide()
 
   // Initialize database (migration from legacy paths happens here)
   log.info('[startup 1/5] Initializing database...')

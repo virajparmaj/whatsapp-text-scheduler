@@ -87,46 +87,51 @@ export default function App() {
     <ToastProvider>
       <ScheduleProvider>
       <ThemeManager />
-      <div className="flex h-screen">
-        {/* Sidebar */}
-        <nav className="w-52 border-r bg-muted/30 pt-4 flex flex-col">
-          <div className="px-4 pb-4 border-b border-border/50 mb-2">
-            <div className="flex items-center gap-2.5">
-              <img src={iconSrc} alt="WhatTime" className="w-8 h-8 rounded-lg" />
-              <div>
-                <h1 className="text-sm font-semibold text-foreground leading-tight">WhatTime</h1>
-                <p className="text-[10px] text-muted-foreground">Local message scheduling</p>
+      <div className="flex flex-col h-screen">
+        {/* Titlebar drag region — replaces body padding-top for traffic lights */}
+        <div className="h-10 shrink-0 app-drag-region" />
+
+        <div className="flex flex-1 min-h-0">
+          {/* Sidebar */}
+          <nav className="w-52 border-r bg-muted/30 flex flex-col">
+            <div className="px-4 py-4 border-b border-border/50 mb-2 app-drag-region">
+              <div className="flex items-center gap-2.5">
+                <img src={iconSrc} alt="WhatTime" className="w-8 h-8 rounded-lg" />
+                <div>
+                  <h1 className="text-sm font-semibold text-foreground leading-tight">WhatTime</h1>
+                  <p className="text-[10px] text-muted-foreground">Local message scheduling</p>
+                </div>
               </div>
             </div>
-          </div>
-          <div className="space-y-1 px-2">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={cn(
-                  'flex items-center gap-2 w-full rounded-md py-2 text-sm transition-all duration-150',
-                  activeTab === tab.id
-                    ? 'bg-primary/10 text-primary font-medium border-l-2 border-primary pl-[10px]'
-                    : 'text-muted-foreground hover:bg-accent hover:text-foreground pl-3'
-                )}
-              >
-                <tab.icon className="h-4 w-4" />
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </nav>
+            <div className="space-y-1 px-2">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={cn(
+                    'flex items-center gap-2 w-full rounded-md py-2 text-sm transition-all duration-150',
+                    activeTab === tab.id
+                      ? 'bg-primary/10 text-primary font-medium border-l-2 border-primary pl-[10px]'
+                      : 'text-muted-foreground hover:bg-accent hover:text-foreground pl-3'
+                  )}
+                >
+                  <tab.icon className="h-4 w-4" />
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </nav>
 
-        {/* Content */}
-        <main className="flex-1 overflow-y-auto">
-          <Suspense fallback={null}>
-            {activeTab === 'dashboard' && <Dashboard />}
-            {activeTab === 'calendar' && <CalendarPage />}
-            {activeTab === 'logs' && <Logs />}
-            {activeTab === 'settings' && <Settings />}
-          </Suspense>
-        </main>
+          {/* Content */}
+          <main className="flex-1 overflow-y-auto">
+            <Suspense fallback={null}>
+              {activeTab === 'dashboard' && <Dashboard />}
+              {activeTab === 'calendar' && <CalendarPage />}
+              {activeTab === 'logs' && <Logs />}
+              {activeTab === 'settings' && <Settings />}
+            </Suspense>
+          </main>
+        </div>
       </div>
       </ScheduleProvider>
     </ToastProvider>
