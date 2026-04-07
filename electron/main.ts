@@ -172,13 +172,31 @@ app.whenReady().then(() => {
     }
 
     if (Notification.isSupported()) {
-      const title = execLog.status === 'success' ? 'Message Sent'
-        : execLog.status === 'dry_run' ? 'Dry Run Complete'
-        : execLog.status === 'failed' ? 'Send Failed'
-        : 'Schedule Skipped'
-      const body = execLog.status === 'failed'
-        ? (execLog.errorMessage || 'Unknown error')
-        : (execLog.contactName || execLog.phoneNumber || execLog.scheduleId)
+      const recipient = execLog.recipientType === 'group'
+        ? execLog.groupName
+        : (execLog.contactName || execLog.phoneNumber || 'Unknown')
+
+      let title: string
+      let body: string
+
+      switch (execLog.status) {
+        case 'success':
+          title = `Message Sent to ${recipient}`
+          body = execLog.messagePreview || 'Message delivered'
+          break
+        case 'dry_run':
+          title = `Dry Run — ${recipient}`
+          body = execLog.messagePreview || 'Chat opened (message not sent)'
+          break
+        case 'failed':
+          title = `Failed to Send — ${recipient}`
+          body = execLog.errorMessage || 'Unknown error'
+          break
+        default:
+          title = `Skipped — ${recipient}`
+          body = execLog.errorMessage || 'Schedule was skipped'
+      }
+
       new Notification({ title, body }).show()
     }
   })

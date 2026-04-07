@@ -7,6 +7,17 @@ import type { Schedule, RunLog } from '../../shared/types'
 
 const log = createLogger('scheduler')
 
+function enrichRunLog(entry: RunLog, s: Schedule): RunLog {
+  return {
+    ...entry,
+    recipientType: s.recipientType,
+    phoneNumber: s.phoneNumber,
+    contactName: s.contactName,
+    groupName: s.groupName,
+    messagePreview: s.message.substring(0, 80),
+  }
+}
+
 function parseTimeOfDay(t: string): { hours: number; minutes: number } {
   const [hours, minutes] = t.split(':').map(Number)
   return { hours, minutes }
@@ -362,11 +373,13 @@ function scheduleRetry(
   const maxRetries = settings.maxRetries
 
   if (attempt >= maxRetries) {
-    const entry = insertRunLog(
+    let entry = insertRunLog(
       scheduleId, 'failed',
       `Gave up after ${maxRetries} retries`,
       undefined, scheduledTime, attempt
     )
+    const s = getScheduleById(scheduleId)
+    if (s) entry = enrichRunLog(entry, s)
     if (onExecutedCallback) onExecutedCallback(entry)
     log.warn(`Schedule ${scheduleId}: gave up after ${maxRetries} retries`)
     return
@@ -408,7 +421,7 @@ async function executeJob(
     const scheduledTime = existingScheduledTime || new Date().toISOString()
 
     if (!s.enabled) {
-      const entry = insertRunLog(scheduleId, 'skipped', 'Schedule is disabled', undefined, scheduledTime)
+      const entry = enrichRunLog(insertRunLog(scheduleId, 'skipped', 'Schedule is disabled', undefined, scheduledTime), s)
       if (onExecutedCallback) onExecutedCallback(entry)
       return entry
     }
@@ -423,7 +436,7 @@ async function executeJob(
     }
 
     if (screenLocked) {
-      const entry = insertRunLog(scheduleId, 'skipped', 'Screen locked: cannot send via AppleScript', undefined, scheduledTime, retryAttempt, retryOf)
+      const entry = enrichRunLog(insertRunLog(scheduleId, 'skipped', 'Screen locked: cannot send via AppleScript', undefined, scheduledTime, retryAttempt, retryOf), s)
       updateLastFiredAt(scheduleId)
       if (onExecutedCallback) onExecutedCallback(entry)
       return entry
@@ -451,7 +464,7 @@ async function executeJob(
 
     log.info(`Execution ${scheduleId} → ${status} (${durationMs}ms)${result.error ? ` error: ${result.error}` : ''}`)
 
-    const entry = insertRunLog(scheduleId, status, result.error, durationMs, scheduledTime, retryAttempt, retryOf)
+    const entry = enrichRunLog(insertRunLog(scheduleId, status, result.error, durationMs, scheduledTime, retryAttempt, retryOf), s)
     updateLastFiredAt(scheduleId)
 
     // Auto-disable one-time schedules after any execution attempt
