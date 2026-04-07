@@ -136,6 +136,10 @@ app.whenReady().then(() => {
   log.info(`logs path     : ${app.getPath('logs')}`)
   log.info(`exe path      : ${app.getPath('exe')}`)
 
+  if (process.platform === 'darwin') {
+    app.dock?.hide()
+  }
+
   // Initialize database (migration from legacy paths happens here)
   log.info('[startup 1/5] Initializing database...')
   initDb()
