@@ -32,16 +32,30 @@ const LEGACY_USERDATA_DIRS = [
 function migrateFromOldPath(): void {
   const newDb = getDbPath()
   const newDir = app.getPath('userData')
-  const oldDir = LEGACY_USERDATA_DIRS
-    .map((dirName) => join(app.getPath('home'), 'Library', 'Application Support', dirName))
-    .find((dir) => dir !== newDir && existsSync(join(dir, 'schedules.db')))
+  log.info(`Checking for legacy DB migration (target: ${newDir})`)
 
-  if (!oldDir) return
+  const candidates = LEGACY_USERDATA_DIRS.map((dirName) =>
+    join(app.getPath('home'), 'Library', 'Application Support', dirName)
+  )
+  for (const dir of candidates) {
+    const exists = existsSync(join(dir, 'schedules.db'))
+    log.info(`  legacy path "${dir}": ${exists ? 'FOUND' : 'not found'}`)
+  }
+
+  const oldDir = candidates.find((dir) => dir !== newDir && existsSync(join(dir, 'schedules.db')))
+
+  if (!oldDir) {
+    log.info('No legacy DB found — skipping migration')
+    return
+  }
 
   const oldDb = join(oldDir, 'schedules.db')
 
+  log.info(`Legacy DB found at "${oldDir}" — evaluating migration`)
+
   // If new DB exists, only skip migration if it already has data
   if (existsSync(newDb)) {
+    log.info(`New DB already exists at "${newDb}" — checking schedule count`)
     try {
       const tempDb = new Database(newDb, { readonly: true })
       let count = 0
@@ -52,19 +66,32 @@ function migrateFromOldPath(): void {
         // Table doesn't exist yet — treat as empty
       }
       tempDb.close()
-      if (count > 0) return // New DB has data — don't overwrite
-      // count === 0: fall through to overwrite with old data
+      if (count > 0) {
+        log.info(`New DB has ${count} schedule(s) — skipping migration to avoid overwrite`)
+        return
+      }
+      log.info('New DB is empty — will overwrite with legacy data')
     } catch {
-      return // Can't open new DB — leave it alone
+      log.warn('Could not open new DB to check — leaving it alone')
+      return
     }
   }
 
   try {
-    if (!existsSync(newDir)) mkdirSync(newDir, { recursive: true })
+    if (!existsSync(newDir)) {
+      log.info(`Creating userData directory: ${newDir}`)
+      mkdirSync(newDir, { recursive: true })
+    }
+    log.info(`Copying DB: "${oldDir}" → "${newDir}"`)
     copyFileSync(oldDb, newDb)
-    // Also copy WAL/SHM files if they exist
-    if (existsSync(oldDb + '-wal')) copyFileSync(oldDb + '-wal', newDb + '-wal')
-    if (existsSync(oldDb + '-shm')) copyFileSync(oldDb + '-shm', newDb + '-shm')
+    if (existsSync(oldDb + '-wal')) {
+      log.info('Copying WAL file')
+      copyFileSync(oldDb + '-wal', newDb + '-wal')
+    }
+    if (existsSync(oldDb + '-shm')) {
+      log.info('Copying SHM file')
+      copyFileSync(oldDb + '-shm', newDb + '-shm')
+    }
     log.info(`Migrated database from "${oldDir}" to "${newDir}"`)
   } catch (err) {
     log.error('Failed to migrate database from old path', err)
@@ -173,7 +200,9 @@ function rowToRunLog(row: Record<string, unknown>): RunLog {
 
 export function initDb(): void {
   migrateFromOldPath()
+
   const dbPath = getDbPath()
+  log.info(`Opening database: ${dbPath}`)
   db = new Database(dbPath)
   db.pragma('journal_mode = WAL')
   db.pragma('foreign_keys = ON')
@@ -183,27 +212,53 @@ export function initDb(): void {
   if (integrity[0]?.integrity_check !== 'ok') {
     log.error('Database integrity check failed', integrity)
   } else {
-    log.info(`Database opened: ${dbPath}`)
+    log.info(`Database integrity OK: ${dbPath}`)
   }
 
+  log.info('Running schema setup (CREATE TABLE IF NOT EXISTS)...')
   db.exec(SCHEMA)
+  log.info('Schema setup complete')
 
-  // Add new columns to existing DBs (fails silently if column already exists)
-  try { db.exec('ALTER TABLE schedules ADD COLUMN day_of_month INTEGER') } catch {}
-  try { db.exec('ALTER TABLE schedules ADD COLUMN month_of_year INTEGER') } catch {}
-  try { db.exec('ALTER TABLE run_logs ADD COLUMN execution_duration INTEGER') } catch {}
-  try { db.exec('ALTER TABLE run_logs ADD COLUMN scheduled_time TEXT') } catch {}
-  try { db.exec('ALTER TABLE schedules ADD COLUMN last_fired_at TEXT') } catch {}
-  try { db.exec('ALTER TABLE run_logs ADD COLUMN retry_attempt INTEGER DEFAULT 0') } catch {}
-  try { db.exec('ALTER TABLE run_logs ADD COLUMN retry_of TEXT') } catch {}
-  try { db.exec("ALTER TABLE schedules ADD COLUMN recipient_type TEXT NOT NULL DEFAULT 'contact'") } catch {}
-  try { db.exec("ALTER TABLE schedules ADD COLUMN group_name TEXT NOT NULL DEFAULT ''") } catch {}
+  // Add new columns to existing DBs — logs whether each column was new or already present
+  log.info('Running column migrations...')
+  const migrations: [string, string][] = [
+    ['schedules', 'ALTER TABLE schedules ADD COLUMN day_of_month INTEGER'],
+    ['schedules', 'ALTER TABLE schedules ADD COLUMN month_of_year INTEGER'],
+    ['run_logs',  'ALTER TABLE run_logs ADD COLUMN execution_duration INTEGER'],
+    ['run_logs',  'ALTER TABLE run_logs ADD COLUMN scheduled_time TEXT'],
+    ['schedules', 'ALTER TABLE schedules ADD COLUMN last_fired_at TEXT'],
+    ['run_logs',  'ALTER TABLE run_logs ADD COLUMN retry_attempt INTEGER DEFAULT 0'],
+    ['run_logs',  'ALTER TABLE run_logs ADD COLUMN retry_of TEXT'],
+    ['schedules', "ALTER TABLE schedules ADD COLUMN recipient_type TEXT NOT NULL DEFAULT 'contact'"],
+    ['schedules', "ALTER TABLE schedules ADD COLUMN group_name TEXT NOT NULL DEFAULT ''"],
+  ]
+  for (const [, sql] of migrations) {
+    const colMatch = sql.match(/ADD COLUMN (\w+)/)
+    const colName = colMatch ? colMatch[1] : '?'
+    try {
+      db.exec(sql)
+      log.info(`  column "${colName}": added (new install or schema upgrade)`)
+    } catch {
+      log.info(`  column "${colName}": already exists — skipped`)
+    }
+  }
+  log.info('Column migrations complete')
 
   // Set DB file permissions to owner-only
-  try { chmodSync(dbPath, 0o600) } catch {}
+  try {
+    chmodSync(dbPath, 0o600)
+    log.info('DB file permissions set to 600 (owner-only)')
+  } catch (err) {
+    log.warn('Could not set DB file permissions', err)
+  }
 
-  // Auto-prune logs older than 90 days on startup
-  pruneOldLogs(90)
+}
+
+export function schedulePruneOldLogs(): void {
+  setTimeout(() => {
+    log.info('Pruning run_logs older than 90 days (deferred)...')
+    pruneOldLogs(90)
+  }, 5000)
 }
 
 export function pruneOldLogs(olderThanDays: number): void {
@@ -433,7 +488,11 @@ export function clearLogs(olderThanDays?: number): void {
 
 // --- Settings ---
 
+let settingsCache: AppSettings | null = null
+
 export function getSettings(): AppSettings {
+  if (settingsCache) return settingsCache
+
   const rows = db.prepare('SELECT key, value FROM settings').all() as {
     key: string
     value: string
@@ -441,7 +500,7 @@ export function getSettings(): AppSettings {
   const map: Record<string, string> = {}
   for (const row of rows) map[row.key] = row.value
 
-  return {
+  settingsCache = {
     globalDryRun: map.global_dry_run === '1',
     defaultCountryCode: map.default_country_code || '+1',
     sendDelayMs: parseInt(map.send_delay_ms || '3000', 10),
@@ -451,6 +510,7 @@ export function getSettings(): AppSettings {
     theme: (map.theme as 'system' | 'light' | 'dark') || 'system',
     enableGroupScheduling: map.enable_group_scheduling === '1'
   }
+  return settingsCache
 }
 
 export function updateSetting(key: string, value: string): void {
@@ -458,6 +518,7 @@ export function updateSetting(key: string, value: string): void {
     throw new Error(`Invalid settings key: ${key}`)
   }
   db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run(key, value)
+  settingsCache = null // invalidate cache
 }
 
 export function closeDb(): void {

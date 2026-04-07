@@ -7,6 +7,11 @@ import type { Schedule, RunLog } from '../../shared/types'
 
 const log = createLogger('scheduler')
 
+function parseTimeOfDay(t: string): { hours: number; minutes: number } {
+  const [hours, minutes] = t.split(':').map(Number)
+  return { hours, minutes }
+}
+
 // In-memory map of active node-schedule jobs
 const jobs = new Map<string, schedule.Job>()
 
@@ -139,7 +144,7 @@ function detectAndCatchUpMissedRuns(schedules: Schedule[]): void {
  */
 export function getMostRecentExpectedFire(s: Schedule, now: Date): Date | null {
   if (!s.timeOfDay) return null
-  const [hours, minutes] = s.timeOfDay.split(':').map(Number)
+  const { hours, minutes } = parseTimeOfDay(s.timeOfDay)
 
   if (s.scheduleType === 'daily') {
     const candidate = new Date(now)
@@ -237,7 +242,7 @@ export function registerJob(s: Schedule): void {
     rule = fireDate
   } else if (s.scheduleType === 'daily') {
     if (!s.timeOfDay) return
-    const [hours, minutes] = s.timeOfDay.split(':').map(Number)
+    const { hours, minutes } = parseTimeOfDay(s.timeOfDay)
     const r = new schedule.RecurrenceRule()
     r.hour = hours
     r.minute = minutes
@@ -245,7 +250,7 @@ export function registerJob(s: Schedule): void {
     rule = r
   } else if (s.scheduleType === 'weekly') {
     if (!s.timeOfDay || s.dayOfWeek === null || s.dayOfWeek === undefined) return
-    const [hours, minutes] = s.timeOfDay.split(':').map(Number)
+    const { hours, minutes } = parseTimeOfDay(s.timeOfDay)
     const r = new schedule.RecurrenceRule()
     r.dayOfWeek = s.dayOfWeek
     r.hour = hours
@@ -254,7 +259,7 @@ export function registerJob(s: Schedule): void {
     rule = r
   } else if (s.scheduleType === 'quarterly') {
     if (!s.timeOfDay || s.dayOfMonth === null || s.dayOfMonth === undefined) return
-    const [hours, minutes] = s.timeOfDay.split(':').map(Number)
+    const { hours, minutes } = parseTimeOfDay(s.timeOfDay)
     const startMonth = s.monthOfYear ?? 0
     const r = new schedule.RecurrenceRule()
     r.month = [0, 1, 2, 3].map(i => (startMonth + i * 3) % 12)
@@ -265,7 +270,7 @@ export function registerJob(s: Schedule): void {
     rule = r
   } else if (s.scheduleType === 'half_yearly') {
     if (!s.timeOfDay || s.dayOfMonth === null || s.dayOfMonth === undefined) return
-    const [hours, minutes] = s.timeOfDay.split(':').map(Number)
+    const { hours, minutes } = parseTimeOfDay(s.timeOfDay)
     const startMonth = s.monthOfYear ?? 0
     const r = new schedule.RecurrenceRule()
     r.month = [startMonth, (startMonth + 6) % 12]
@@ -276,7 +281,7 @@ export function registerJob(s: Schedule): void {
     rule = r
   } else if (s.scheduleType === 'yearly') {
     if (!s.timeOfDay || s.dayOfMonth === null || s.dayOfMonth === undefined || s.monthOfYear === null || s.monthOfYear === undefined) return
-    const [hours, minutes] = s.timeOfDay.split(':').map(Number)
+    const { hours, minutes } = parseTimeOfDay(s.timeOfDay)
     const r = new schedule.RecurrenceRule()
     r.month = s.monthOfYear
     r.date = s.dayOfMonth

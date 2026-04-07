@@ -1,7 +1,7 @@
 # WhatTime
 
 <div align="center">
-  <img src="./resources/WhatTime.png" alt="WhatTime Logo" width="128" height="128" />
+  <img src="./resources/icon.png" alt="WhatTime Logo" width="128" height="128" />
 </div>
 
 Schedule WhatsApp messages from your Mac with a simple local desktop app.

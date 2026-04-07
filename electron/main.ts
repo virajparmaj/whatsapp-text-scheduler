@@ -1,6 +1,6 @@
 import { app, BrowserWindow, shell, powerMonitor, Notification, Tray, Menu, nativeImage } from 'electron'
 import { join } from 'path'
-import { initDb, closeDb, getSettings } from './services/db.service'
+import { initDb, closeDb, getSettings, schedulePruneOldLogs } from './services/db.service'
 import { initScheduler, setOnExecutedCallback, shutdownScheduler, resyncAfterWake } from './services/scheduler.service'
 import { registerAllHandlers } from './ipc/handlers'
 import { createLogger } from './utils/logger'
@@ -77,9 +77,8 @@ function createWindow(): void {
 }
 
 function createTray(): void {
-  const iconPath = getResourcePath('trayTemplate.png')
-  const icon = nativeImage.createFromPath(iconPath)
-  icon.setTemplateImage(true)
+  const iconPath = getResourcePath('icon.png')
+  const icon = nativeImage.createFromPath(iconPath).resize({ width: 18, height: 18, quality: 'best' })
 
   tray = new Tray(icon)
   tray.setToolTip(APP_NAME)
@@ -131,24 +130,37 @@ app.on('second-instance', () => {
 })
 
 app.whenReady().then(() => {
+  const startMs = Date.now()
   log.info(`Starting ${APP_NAME} v${app.getVersion()} (${isDev ? 'dev' : 'packaged'})`)
+  log.info(`userData path : ${app.getPath('userData')}`)
+  log.info(`logs path     : ${app.getPath('logs')}`)
+  log.info(`exe path      : ${app.getPath('exe')}`)
 
-  // Initialize database
+  // Initialize database (migration from legacy paths happens here)
+  log.info('[startup 1/5] Initializing database...')
   initDb()
+  log.info(`[startup 1/5] Database ready (+${Date.now() - startMs}ms)`)
+  schedulePruneOldLogs() // deferred 5s — runs after window is visible
 
   // Register IPC handlers
+  log.info('[startup 2/5] Registering IPC handlers...')
   registerAllHandlers()
+  log.info(`[startup 2/5] IPC handlers registered (+${Date.now() - startMs}ms)`)
 
-  // Initialize scheduler
+  // Initialize scheduler (missed-run catch-up runs here)
+  log.info('[startup 3/5] Initializing scheduler...')
   initScheduler()
+  log.info(`[startup 3/5] Scheduler ready (+${Date.now() - startMs}ms)`)
 
   // Create system tray icon
+  log.info('[startup 4/5] Creating system tray...')
   createTray()
-  log.info('System tray created')
+  log.info(`[startup 4/5] System tray created (+${Date.now() - startMs}ms)`)
 
   // Sync login item setting from DB
   const settings = getSettings()
   app.setLoginItemSettings({ openAtLogin: settings.openAtLogin, openAsHidden: true })
+  log.info(`open-at-login: ${settings.openAtLogin}`)
 
   // Push execution events to renderer + show native notification
   setOnExecutedCallback((execLog: RunLog) => {
@@ -174,7 +186,9 @@ app.whenReady().then(() => {
     resyncAfterWake()
   })
 
+  log.info('[startup 5/5] Creating main window...')
   createWindow()
+  log.info(`[startup 5/5] Window ready — startup complete in ${Date.now() - startMs}ms`)
 
   app.on('activate', () => {
     if (mainWindow) {
