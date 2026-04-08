@@ -69,3 +69,6 @@ builder-effective-config.yaml
 # macOS extended attributes
 .AppleDouble
 .LSOverride
+
+# Local AI tooling state
+.claude/
