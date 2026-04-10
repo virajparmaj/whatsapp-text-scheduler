@@ -199,6 +199,10 @@ app.whenReady().then(() => {
 
       new Notification({ title, body }).show()
     }
+
+    if (execLog.status === 'success' || execLog.status === 'dry_run') {
+      mainWindow?.hide()
+    }
   })
 
   // Re-sync scheduler after macOS sleep/wake to catch missed timers

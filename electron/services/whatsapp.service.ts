@@ -79,13 +79,15 @@ export async function sendWhatsAppMessage(
       return { success: true, dryRun: true }
     }
 
-    // Activate WhatsApp and press Enter to send
+    // Activate WhatsApp and press Enter to send, then close the window
     const sendScript = `
       tell application "${appName}" to activate
       delay 0.5
       tell application "System Events"
         tell process "${appName}"
           keystroke return
+          delay 1.0
+          keystroke "w" using command down
         end tell
       end tell
     `
@@ -208,12 +210,14 @@ export async function sendWhatsAppGroupMessage(
       return { success: true, dryRun: true }
     }
 
-    // Phase 6: Press Enter to send
+    // Phase 6: Press Enter to send, then close the window
     log.info(`[phase 6] Group send → "${groupName}": sending`)
     const sendScript = `
       tell application "System Events"
         tell process "${appName}"
           keystroke return
+          delay 1.0
+          keystroke "w" using command down
         end tell
       end tell
     `
